@@ -395,36 +395,60 @@ implementation detail.
 need truly custom layouts can still use scroll regions directly, but
 this is an escape hatch, not the recommended path.
 
-## Phasing
+## Implementation Plan
 
-### Phase 1: Layout Engine + Scroll Manager (pure TypeScript)
+All four layers are built together and landed as a single coherent
+change. No intermediate states, no text-based placeholders.
 
-- Implement Layout Engine and Scroll Manager as library modules in
-  `plugins/lib/`.
-- Text-based scroll indicators (`▲`/`▼` or `[3/47]`) as placeholder —
-  no core changes yet.
-- Migrate `pkg.ts` as the simplest validation target.
-- Validate API ergonomics and scroll behavior.
+### 1. Core Scroll Regions (Rust, ~150 LoC)
 
-### Phase 2: Core Scroll Regions (~150 LoC Rust)
+- Add `ScrollRegion` struct to virtual buffer model.
+- Extend `setVirtualBufferContent()` bridge to accept `scrollRegions`.
+- After painting virtual buffer content, iterate regions and call
+  existing `render_scrollbar()` for each that needs one.
+- Mouse handler: on wheel/click in a virtual buffer, hit-test against
+  region rects. If hit, dispatch `on_region_scroll(id, delta)` or
+  `on_region_scroll(id, ratio)` to the plugin instead of default
+  buffer scroll.
 
-- Add `ScrollRegion` to virtual buffer model.
-- Render per-region scrollbars using existing `render_scrollbar()`.
-- Add mouse wheel/drag event routing to plugin callbacks.
-- Extend `setVirtualBufferContent()` TS API.
-- Replace text-based indicators with real scrollbars.
+### 2. Layout Engine (TypeScript, ~300 LoC)
 
-### Phase 3: Panel Framework + Migration
+- Implement `computeLayout(root: LayoutNode, totalRect: Rect)` in
+  `plugins/lib/layout-engine.ts`.
+- Support `container` (horizontal/vertical with children),
+  `leaf`, `divider`, `fixed` node types.
+- Support `fixed`, `ratio`, `flex` sizing.
+- Unit tests: pure function, tree + rect in, leaf rects out.
 
-- Build `PanelLayout` framework composing Layers 1-3.
-- Migrate `pkg.ts`, `theme_editor.ts`, `audit_mode.ts` (magit view).
-- Document framework API for future plugin authors.
+### 3. Scroll Manager (TypeScript, ~200 LoC)
 
-### Phase 4 (future): Complex layouts
+- Implement `ScrollState` and `ScrollManager` in
+  `plugins/lib/scroll-manager.ts`.
+- Port scroll math from Rust `scroll_panel.rs`: offset, viewport,
+  contentHeight, ensureVisible, scrollBy, clamp.
+- Sync groups: scrolling one leaf propagates to all others in group.
+- Focus tracking: which leaf receives keyboard scroll events.
 
-- 3-way merge tool using nested layout with sync groups.
-- Composite buffer leaf nodes for hunk-aligned diff panes.
-- Debugger, profiler, or project overview panels.
+### 4. Panel Framework (TypeScript, ~400 LoC)
+
+- Implement `PanelLayout` in `plugins/lib/panel-layout.ts`.
+- `ScrollPanel`, `Divider`, `Toolbar`/`HeaderRow` components.
+- On `update()`: compute layout → slice items per scroll state →
+  assemble `TextPropertyEntry[]` → pass scroll region metadata to
+  `setVirtualBufferContent()`.
+- Handle `on_region_scroll` → update `ScrollManager` → re-render.
+- Keyboard: Tab cycles focused leaf, arrows/PageUp/PageDown go to
+  focused leaf's `ScrollState`.
+
+### 5. Migrate Existing Plugins
+
+- **pkg.ts**: simplest — two panels, no scroll sync. Fixes the
+  missing scroll offset bug (selection going off-screen).
+- **audit_mode.ts** (magit view): two panels with independent scroll,
+  focus switching. Replaces manual `fileScrollOffset`/
+  `diffScrollOffset` tracking.
+- **theme_editor.ts**: left panel scrollable, right panel grid
+  navigation. Replaces manual `treeScrollOffset` tracking.
 
 ## Relationship to Existing Infrastructure
 
