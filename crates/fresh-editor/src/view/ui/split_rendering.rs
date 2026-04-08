@@ -1322,8 +1322,11 @@ impl SplitRenderer {
                     )
                 };
 
-                // Render vertical scrollbar for this split and get thumb position
-                let (thumb_start, thumb_end) = if show_vertical_scrollbar {
+                // Render vertical scrollbar for this split and get thumb position.
+                // Skip the buffer-global scrollbar when scroll regions are present,
+                // since per-region scrollbars replace it.
+                let has_scroll_regions = !state.scroll_regions.is_empty();
+                let (thumb_start, thumb_end) = if show_vertical_scrollbar && !has_scroll_regions {
                     Self::render_scrollbar(
                         frame,
                         state,

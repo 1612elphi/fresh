@@ -2006,7 +2006,37 @@ function onThemeEditorMouseScroll(data: { buffer_id: number; delta: number; col:
 
   // delta > 0 = scroll down, delta < 0 = scroll up
   const scrollAmount = data.delta > 0 ? 3 : -3;
-  state.treeScrollOffset = Math.max(0, state.treeScrollOffset + scrollAmount);
+  const treeVisibleRows = Math.max(8, state.viewportHeight - 2);
+  const allLeftLines = buildTreeLines();
+  const maxOffset = Math.max(0, allLeftLines.length - treeVisibleRows);
+  state.treeScrollOffset = Math.max(0, Math.min(maxOffset, state.treeScrollOffset + scrollAmount));
+
+  // Move selection into the visible window if it scrolled out of view,
+  // otherwise ensureVisible in buildDisplayEntries will fight the scroll.
+  let selectedLineIdx = -1;
+  for (let i = 0; i < allLeftLines.length; i++) {
+    if (allLeftLines[i].index === state.selectedIndex && allLeftLines[i].selected) {
+      selectedLineIdx = i;
+      break;
+    }
+  }
+  if (selectedLineIdx >= 0) {
+    if (selectedLineIdx < state.treeScrollOffset) {
+      // Selected item scrolled above viewport — move selection down to first visible field
+      const firstVisible = allLeftLines[state.treeScrollOffset];
+      if (firstVisible && firstVisible.index !== undefined) {
+        state.selectedIndex = firstVisible.index;
+      }
+    } else if (selectedLineIdx >= state.treeScrollOffset + treeVisibleRows) {
+      // Selected item scrolled below viewport — move selection up to last visible field
+      const lastVisibleIdx = Math.min(state.treeScrollOffset + treeVisibleRows - 1, allLeftLines.length - 1);
+      const lastVisible = allLeftLines[lastVisibleIdx];
+      if (lastVisible && lastVisible.index !== undefined) {
+        state.selectedIndex = lastVisible.index;
+      }
+    }
+  }
+
   updateDisplay();
 }
 registerHandler("onThemeEditorMouseScroll", onThemeEditorMouseScroll);
