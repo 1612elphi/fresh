@@ -293,6 +293,30 @@ pub enum HookArgs {
 
     /// Terminal focus was gained (e.g. user switched back to the editor)
     FocusGained,
+
+    /// Scroll region scrollbar was clicked or dragged to a new offset
+    RegionScroll {
+        buffer_id: BufferId,
+        region_id: String,
+        /// New scroll offset (line index)
+        offset: usize,
+    },
+
+    /// Panel border is being dragged
+    BorderDrag {
+        buffer_id: BufferId,
+        border_id: String,
+        /// Pixels moved from drag start (positive = right/down)
+        delta: i32,
+    },
+
+    /// Panel border drag ended
+    BorderDragEnd {
+        buffer_id: BufferId,
+        border_id: String,
+        /// Final delta from drag start
+        delta: i32,
+    },
 }
 
 /// Information about a single line for the LinesChanged hook
@@ -762,6 +786,39 @@ pub fn hook_args_to_json(args: &HookArgs) -> Result<serde_json::Value> {
         }
         HookArgs::FocusGained => {
             serde_json::json!({})
+        }
+        HookArgs::RegionScroll {
+            buffer_id,
+            region_id,
+            offset,
+        } => {
+            serde_json::json!({
+                "buffer_id": buffer_id.0,
+                "region_id": region_id,
+                "offset": offset,
+            })
+        }
+        HookArgs::BorderDrag {
+            buffer_id,
+            border_id,
+            delta,
+        } => {
+            serde_json::json!({
+                "buffer_id": buffer_id.0,
+                "border_id": border_id,
+                "delta": delta,
+            })
+        }
+        HookArgs::BorderDragEnd {
+            buffer_id,
+            border_id,
+            delta,
+        } => {
+            serde_json::json!({
+                "buffer_id": buffer_id.0,
+                "border_id": border_id,
+                "delta": delta,
+            })
         }
     };
 

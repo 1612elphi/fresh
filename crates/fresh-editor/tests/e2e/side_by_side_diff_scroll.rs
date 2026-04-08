@@ -34,6 +34,7 @@ fn setup_side_by_side_diff(
             old_buffer_id,
             vec![TextPropertyEntry::text(old_content)],
             Vec::new(),
+            Vec::new(),
         )
         .unwrap();
 
@@ -48,6 +49,7 @@ fn setup_side_by_side_diff(
         .set_virtual_buffer_content(
             new_buffer_id,
             vec![TextPropertyEntry::text(new_content)],
+            Vec::new(),
             Vec::new(),
         )
         .unwrap();

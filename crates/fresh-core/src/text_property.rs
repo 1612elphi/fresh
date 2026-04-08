@@ -115,6 +115,27 @@ pub struct ScrollRegion {
     pub offset: usize,
 }
 
+/// A draggable border within a virtual buffer.
+///
+/// Plugins declare border regions to get drag-to-resize support.
+/// The core provides hit testing, hover highlighting, and fires
+/// drag events to the plugin.
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, rename_all = "camelCase")]
+pub struct BorderRegion {
+    /// Unique identifier for this border (e.g., "divider")
+    pub id: String,
+    /// X position (column) of the border
+    pub x: u16,
+    /// Y position (row) of the border start
+    pub y: u16,
+    /// Length of the border in rows (vertical) or columns (horizontal)
+    pub length: u16,
+    /// Direction: "v" for vertical border, "h" for horizontal
+    pub direction: String,
+}
+
 /// An entry with text and its properties
 #[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]

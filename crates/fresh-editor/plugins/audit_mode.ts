@@ -974,6 +974,18 @@ function on_review_mouse_scroll(data: { buffer_id: number; delta: number; col: n
 registerHandler("on_review_mouse_scroll", on_review_mouse_scroll);
 editor.on("mouse_scroll", "on_review_mouse_scroll");
 
+function on_review_region_scroll(data: { buffer_id: number; region_id: string; offset: number }): void {
+    if (state.reviewBufferId === null || data.buffer_id !== state.reviewBufferId) return;
+    if (data.region_id === "review-files") {
+        state.fileScrollOffset = data.offset;
+    } else if (data.region_id === "review-diff") {
+        state.diffScrollOffset = data.offset;
+    }
+    updateMagitDisplay();
+}
+registerHandler("on_review_region_scroll", on_review_region_scroll);
+editor.on("on_region_scroll", "on_review_region_scroll");
+
 /**
  * Represents an aligned line pair for side-by-side diff display
  */

@@ -221,6 +221,35 @@ impl Editor {
                 self.mouse_state.drag_start_popup_scroll = None;
                 // Clear popup text selection drag state (selection remains in popup)
                 self.mouse_state.selecting_in_popup = None;
+                // Clear per-region scrollbar drag state
+                if let Some((ref border_id, _split_id)) = self.mouse_state.dragging_panel_border {
+                    // Fire border drag end event
+                    if let Some(border) = self
+                        .cached_layout
+                        .panel_border_areas
+                        .iter()
+                        .find(|b| b.border_id == *border_id)
+                    {
+                        if let Some(start_pos) = self.mouse_state.drag_panel_border_start_pos {
+                            let (col, row) = self.mouse_state.last_position.unwrap_or((0, 0));
+                            let current_pos = if border.direction == "v" { col } else { row };
+                            let delta = current_pos as i32 - start_pos as i32;
+                            self.plugin_manager.run_hook(
+                                "on_border_drag_end",
+                                fresh_core::hooks::HookArgs::BorderDragEnd {
+                                    buffer_id: border.buffer_id,
+                                    border_id: border_id.clone(),
+                                    delta,
+                                },
+                            );
+                        }
+                    }
+                }
+                self.mouse_state.dragging_scroll_region = None;
+                self.mouse_state.drag_scroll_region_start_row = None;
+                self.mouse_state.drag_scroll_region_start_offset = None;
+                self.mouse_state.dragging_panel_border = None;
+                self.mouse_state.drag_panel_border_start_pos = None;
 
                 // If we finished dragging a separator, resize visible terminals
                 if was_dragging_separator {
@@ -947,6 +976,16 @@ impl Editor {
             }
         }
 
+        // Check per-region scrollbars and panel borders
+        if let Some(target) = super::scroll_region_mouse::compute_hover(
+            &self.cached_layout.scroll_region_areas,
+            &self.cached_layout.panel_border_areas,
+            col,
+            row,
+        ) {
+            return Some(target);
+        }
+
         // Check scrollbars
         for (split_id, _buffer_id, _content_rect, scrollbar_rect, thumb_start, thumb_end) in
             &self.cached_layout.split_areas
@@ -1583,6 +1622,88 @@ impl Editor {
             }
         }
 
+        // Check if click is on a per-region scrollbar
+        // Extract all data from the hit area before mutating self
+        let scroll_region_hit = super::scroll_region_mouse::find_scroll_region_hit(
+            &self.cached_layout.scroll_region_areas,
+            col,
+            row,
+        )
+        .map(|(area, is_on_thumb)| {
+            (
+                area.region_id.clone(),
+                area.split_id,
+                area.buffer_id,
+                area.current_offset,
+                area.scrollbar_rect,
+                area.total_lines,
+                area.visible_lines,
+                area.thumb_start,
+                area.thumb_end,
+                is_on_thumb,
+            )
+        });
+        if let Some((
+            region_id,
+            split_id,
+            buffer_id,
+            current_offset,
+            scrollbar_rect,
+            total_lines,
+            visible_lines,
+            _thumb_start,
+            _thumb_end,
+            is_on_thumb,
+        )) = scroll_region_hit
+        {
+            self.focus_split(split_id, buffer_id);
+            self.mouse_state.dragging_scroll_region =
+                Some((region_id.clone(), split_id, buffer_id));
+            if is_on_thumb {
+                self.mouse_state.drag_scroll_region_start_row = Some(row);
+                self.mouse_state.drag_scroll_region_start_offset = Some(current_offset);
+                self.mouse_state.hover_target = Some(HoverTarget::ScrollRegionThumb(region_id));
+            } else {
+                // Track click — compute offset and fire event
+                let track_height = scrollbar_rect.height as usize;
+                let max_offset = total_lines.saturating_sub(visible_lines);
+                let new_offset = if track_height > 1 && max_offset > 0 {
+                    let relative_row = row.saturating_sub(scrollbar_rect.y) as f64;
+                    let ratio = (relative_row / (track_height as f64 - 1.0)).clamp(0.0, 1.0);
+                    (ratio * max_offset as f64).round() as usize
+                } else {
+                    0
+                };
+                self.plugin_manager.run_hook(
+                    "on_region_scroll",
+                    fresh_core::hooks::HookArgs::RegionScroll {
+                        buffer_id,
+                        region_id: region_id.clone(),
+                        offset: new_offset,
+                    },
+                );
+                // Also set drag start so continued dragging works
+                self.mouse_state.drag_scroll_region_start_row = None;
+                self.mouse_state.drag_scroll_region_start_offset = None;
+                self.mouse_state.hover_target = Some(HoverTarget::ScrollRegionThumb(region_id));
+            }
+            return Ok(());
+        }
+
+        // Check if click is on a panel border
+        let border_hit = super::scroll_region_mouse::find_border_hit(
+            &self.cached_layout.panel_border_areas,
+            col,
+            row,
+        )
+        .map(|b| (b.border_id.clone(), b.split_id, b.direction.clone()));
+        if let Some((border_id, split_id, direction)) = border_hit {
+            self.mouse_state.dragging_panel_border = Some((border_id, split_id));
+            let start_pos = if direction == "v" { col } else { row };
+            self.mouse_state.drag_panel_border_start_pos = Some(start_pos);
+            return Ok(());
+        }
+
         // Check if click is on a scrollbar
         let scrollbar_hit = self.cached_layout.split_areas.iter().find_map(
             |(split_id, buffer_id, _content_rect, scrollbar_rect, thumb_start, thumb_end)| {
@@ -1968,6 +2089,69 @@ impl Editor {
 
     /// Handle mouse drag event
     pub(super) fn handle_mouse_drag(&mut self, col: u16, row: u16) -> AnyhowResult<()> {
+        // If dragging a per-region scrollbar
+        if let Some((ref region_id, _split_id, buffer_id)) =
+            self.mouse_state.dragging_scroll_region.clone()
+        {
+            // Find the matching scroll region hit area
+            if let Some(area) = self
+                .cached_layout
+                .scroll_region_areas
+                .iter()
+                .find(|a| a.region_id == *region_id)
+            {
+                let new_offset = if let (Some(start_row), Some(start_offset)) = (
+                    self.mouse_state.drag_scroll_region_start_row,
+                    self.mouse_state.drag_scroll_region_start_offset,
+                ) {
+                    // Relative thumb drag
+                    super::scroll_region_mouse::offset_from_thumb_drag(
+                        area,
+                        row,
+                        start_row,
+                        start_offset,
+                    )
+                } else {
+                    // Jump drag (started from track click)
+                    super::scroll_region_mouse::offset_from_track_click(area, row)
+                };
+                self.plugin_manager.run_hook(
+                    "on_region_scroll",
+                    fresh_core::hooks::HookArgs::RegionScroll {
+                        buffer_id,
+                        region_id: region_id.clone(),
+                        offset: new_offset,
+                    },
+                );
+            }
+            return Ok(());
+        }
+
+        // If dragging a panel border
+        if let Some((ref border_id, _split_id)) = self.mouse_state.dragging_panel_border.clone() {
+            if let Some(border) = self
+                .cached_layout
+                .panel_border_areas
+                .iter()
+                .find(|b| b.border_id == *border_id)
+            {
+                let buffer_id = border.buffer_id;
+                if let Some(start_pos) = self.mouse_state.drag_panel_border_start_pos {
+                    let current_pos = if border.direction == "v" { col } else { row };
+                    let delta = current_pos as i32 - start_pos as i32;
+                    self.plugin_manager.run_hook(
+                        "on_border_drag",
+                        fresh_core::hooks::HookArgs::BorderDrag {
+                            buffer_id,
+                            border_id: border_id.clone(),
+                            delta,
+                        },
+                    );
+                }
+            }
+            return Ok(());
+        }
+
         // If dragging scrollbar, update scroll position
         if let Some(dragging_split_id) = self.mouse_state.dragging_scrollbar {
             // Find the buffer and scrollbar rect for this split

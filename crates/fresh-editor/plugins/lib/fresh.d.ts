@@ -1505,7 +1505,10 @@ interface EditorAPI {
 	* 
 	* Note: entries should be TextPropertyEntry[] - uses manual parsing for HashMap support
 	*/
-	setVirtualBufferContent(bufferId: number, entriesArr: Record<string, unknown>[], options?: { scrollRegions?: Array<{ id: string; x: number; y: number; w: number; h: number; totalLines: number; offset: number }> }): boolean;
+	setVirtualBufferContent(bufferId: number, entriesArr: Record<string, unknown>[], options?: {
+		scrollRegions?: Array<{ id: string; x: number; y: number; w: number; h: number; totalLines: number; offset: number }>;
+		borderRegions?: Array<{ id: string; x: number; y: number; length: number; direction: string }>;
+	}): boolean;
 	/**
 	* Get text properties at cursor position (returns JS array)
 	*/

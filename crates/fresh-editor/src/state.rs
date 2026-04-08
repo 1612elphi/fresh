@@ -199,6 +199,9 @@ pub struct EditorState {
     /// Set by plugins via `setVirtualBufferContent()` with scroll region metadata.
     pub scroll_regions: Vec<fresh_core::text_property::ScrollRegion>,
 
+    /// Border regions for drag-to-resize support in virtual buffers.
+    pub border_regions: Vec<fresh_core::text_property::BorderRegion>,
+
     /// Debug mode: reveal highlight/overlay spans (WordPerfect-style)
     pub debug_highlight_mode: bool,
 
@@ -295,6 +298,7 @@ impl EditorState {
             reference_highlighter: ReferenceHighlighter::new(),
             is_composite_buffer: false,
             scroll_regions: Vec::new(),
+            border_regions: Vec::new(),
             debug_highlight_mode: false,
             reference_highlight_overlay: ReferenceHighlightOverlay::new(),
             bracket_highlight_overlay: BracketHighlightOverlay::new(),

@@ -447,6 +447,12 @@ pub enum HoverTarget {
     ScrollbarThumb(LeafId),
     /// Hovering over a scrollbar track (split_id, relative_row)
     ScrollbarTrack(LeafId, u16),
+    /// Hovering over a per-region scrollbar thumb (region_id)
+    ScrollRegionThumb(String),
+    /// Hovering over a per-region scrollbar track (region_id)
+    ScrollRegionTrack(String),
+    /// Hovering over a panel border (border_id)
+    PanelBorder(String),
     /// Hovering over a menu bar item (menu_index)
     MenuBarItem(usize),
     /// Hovering over a menu dropdown item (menu_index, item_index)
@@ -762,6 +768,16 @@ pub(super) struct MouseState {
     /// Initial composite scroll_row when starting to drag the scrollbar thumb
     /// Used for composite buffer scrollbar drag
     pub drag_start_composite_scroll_row: Option<usize>,
+    /// Dragging a per-region scrollbar (region_id, split_id, buffer_id)
+    pub dragging_scroll_region: Option<(String, LeafId, BufferId)>,
+    /// Start row for per-region scrollbar drag
+    pub drag_scroll_region_start_row: Option<u16>,
+    /// Start offset for per-region scrollbar drag
+    pub drag_scroll_region_start_offset: Option<usize>,
+    /// Dragging a panel border (border_id, split_id)
+    pub dragging_panel_border: Option<(String, LeafId)>,
+    /// Start position for panel border drag
+    pub drag_panel_border_start_pos: Option<u16>,
 }
 
 /// Mapping from visual row to buffer positions for mouse click handling
@@ -892,6 +908,41 @@ pub(crate) struct CachedLayout {
     /// Per-cell theme key provenance recorded during rendering.
     /// Flat vec indexed as `row * width + col` where `width = last_frame_width`.
     pub cell_theme_map: Vec<CellThemeInfo>,
+    /// Per-region scrollbar hit areas (populated during rendering)
+    /// (region_id, buffer_id, split_id, scrollbar_rect, thumb_start, thumb_end, total_lines, visible_lines, offset)
+    pub scroll_region_areas: Vec<ScrollRegionHitArea>,
+    /// Panel border hit areas (populated during rendering)
+    pub panel_border_areas: Vec<PanelBorderHitArea>,
+}
+
+/// Hit area for a per-region scrollbar
+#[derive(Debug, Clone)]
+pub struct ScrollRegionHitArea {
+    pub region_id: String,
+    pub buffer_id: BufferId,
+    pub split_id: LeafId,
+    pub scrollbar_rect: Rect,
+    pub thumb_start: usize,
+    pub thumb_end: usize,
+    pub total_lines: usize,
+    pub visible_lines: usize,
+    pub current_offset: usize,
+}
+
+/// Hit area for a panel border
+#[derive(Debug, Clone)]
+pub struct PanelBorderHitArea {
+    pub border_id: String,
+    pub buffer_id: BufferId,
+    pub split_id: LeafId,
+    /// "v" or "h"
+    pub direction: String,
+    /// Absolute screen x
+    pub x: u16,
+    /// Absolute screen y
+    pub y: u16,
+    /// Length in rows (vertical) or columns (horizontal)
+    pub length: u16,
 }
 
 impl CachedLayout {

@@ -69,6 +69,7 @@ fn setup_diff(
             old_buffer_id,
             vec![TextPropertyEntry::text(old_content)],
             Vec::new(),
+            Vec::new(),
         )
         .unwrap();
 
@@ -81,6 +82,7 @@ fn setup_diff(
         .set_virtual_buffer_content(
             new_buffer_id,
             vec![TextPropertyEntry::text(new_content)],
+            Vec::new(),
             Vec::new(),
         )
         .unwrap();
@@ -262,6 +264,7 @@ fn setup_diff_with_initial_focus(
             old_buffer_id,
             vec![TextPropertyEntry::text(old_content)],
             Vec::new(),
+            Vec::new(),
         )
         .unwrap();
 
@@ -274,6 +277,7 @@ fn setup_diff_with_initial_focus(
         .set_virtual_buffer_content(
             new_buffer_id,
             vec![TextPropertyEntry::text(new_content)],
+            Vec::new(),
             Vec::new(),
         )
         .unwrap();
@@ -424,6 +428,7 @@ fn test_flush_layout_enables_hunk_nav_before_render() {
             old_buffer_id,
             vec![TextPropertyEntry::text(&old_content)],
             Vec::new(),
+            Vec::new(),
         )
         .unwrap();
 
@@ -436,6 +441,7 @@ fn test_flush_layout_enables_hunk_nav_before_render() {
         .set_virtual_buffer_content(
             new_buffer_id,
             vec![TextPropertyEntry::text(&new_content)],
+            Vec::new(),
             Vec::new(),
         )
         .unwrap();
@@ -516,6 +522,7 @@ fn test_flush_layout_jump_to_third_hunk_before_render() {
             old_buffer_id,
             vec![TextPropertyEntry::text(&old_content)],
             Vec::new(),
+            Vec::new(),
         )
         .unwrap();
 
@@ -528,6 +535,7 @@ fn test_flush_layout_jump_to_third_hunk_before_render() {
         .set_virtual_buffer_content(
             new_buffer_id,
             vec![TextPropertyEntry::text(&new_content)],
+            Vec::new(),
             Vec::new(),
         )
         .unwrap();

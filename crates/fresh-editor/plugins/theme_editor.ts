@@ -2042,6 +2042,36 @@ function onThemeEditorMouseScroll(data: { buffer_id: number; delta: number; col:
 registerHandler("onThemeEditorMouseScroll", onThemeEditorMouseScroll);
 editor.on("mouse_scroll", "onThemeEditorMouseScroll");
 
+function onThemeEditorRegionScroll(data: { buffer_id: number; region_id: string; offset: number }): void {
+  if (state.bufferId === null || data.buffer_id !== state.bufferId) return;
+  if (data.region_id === "theme-tree") {
+    state.treeScrollOffset = data.offset;
+    // Move selection into visible window if needed
+    const treeVisibleRows = Math.max(8, state.viewportHeight - 2);
+    const allLeftLines = buildTreeLines();
+    let selectedLineIdx = -1;
+    for (let i = 0; i < allLeftLines.length; i++) {
+      if (allLeftLines[i].index === state.selectedIndex && allLeftLines[i].selected) {
+        selectedLineIdx = i;
+        break;
+      }
+    }
+    if (selectedLineIdx >= 0) {
+      if (selectedLineIdx < state.treeScrollOffset) {
+        const first = allLeftLines[state.treeScrollOffset];
+        if (first && first.index !== undefined) state.selectedIndex = first.index;
+      } else if (selectedLineIdx >= state.treeScrollOffset + treeVisibleRows) {
+        const lastIdx = Math.min(state.treeScrollOffset + treeVisibleRows - 1, allLeftLines.length - 1);
+        const last = allLeftLines[lastIdx];
+        if (last && last.index !== undefined) state.selectedIndex = last.index;
+      }
+    }
+    updateDisplay();
+  }
+}
+registerHandler("onThemeEditorRegionScroll", onThemeEditorRegionScroll);
+editor.on("on_region_scroll", "onThemeEditorRegionScroll");
+
 /**
  * Handle buffer_closed event to reset state when buffer is closed by any means
  */

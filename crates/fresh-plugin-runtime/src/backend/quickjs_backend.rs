@@ -608,6 +608,22 @@ fn parse_scroll_region(obj: &Object<'_>) -> Option<fresh_core::text_property::Sc
     })
 }
 
+/// Parse a BorderRegion from a JS Object
+fn parse_border_region(obj: &Object<'_>) -> Option<fresh_core::text_property::BorderRegion> {
+    let id: String = obj.get("id").ok()?;
+    let x: u16 = obj.get("x").ok()?;
+    let y: u16 = obj.get("y").ok()?;
+    let length: u16 = obj.get("length").ok()?;
+    let direction: String = obj.get("direction").ok()?;
+    Some(fresh_core::text_property::BorderRegion {
+        id,
+        x,
+        y,
+        length,
+        direction,
+    })
+}
+
 /// Pending response senders type alias
 pub type PendingResponses =
     Arc<std::sync::Mutex<HashMap<u64, tokio::sync::oneshot::Sender<PluginResponse>>>>;
@@ -3422,9 +3438,10 @@ impl JsEditorApi {
             .filter_map(|obj| parse_text_property_entry(&ctx, obj))
             .collect();
 
-        // Parse optional scroll regions from options.scrollRegions
-        let scroll_regions = if let Some(opts) = options.0 {
-            opts.get::<_, rquickjs::Array>("scrollRegions")
+        // Parse optional scroll regions and border regions from options
+        let (scroll_regions, border_regions) = if let Some(ref opts) = options.0 {
+            let sr = opts
+                .get::<_, rquickjs::Array>("scrollRegions")
                 .ok()
                 .map(|arr| {
                     arr.iter::<rquickjs::Object>()
@@ -3432,9 +3449,20 @@ impl JsEditorApi {
                         .filter_map(|obj| parse_scroll_region(&obj))
                         .collect()
                 })
-                .unwrap_or_default()
+                .unwrap_or_default();
+            let br = opts
+                .get::<_, rquickjs::Array>("borderRegions")
+                .ok()
+                .map(|arr| {
+                    arr.iter::<rquickjs::Object>()
+                        .flatten()
+                        .filter_map(|obj| parse_border_region(&obj))
+                        .collect()
+                })
+                .unwrap_or_default();
+            (sr, br)
         } else {
-            Vec::new()
+            (Vec::new(), Vec::new())
         };
 
         Ok(self
@@ -3443,6 +3471,7 @@ impl JsEditorApi {
                 buffer_id: BufferId(buffer_id as usize),
                 entries,
                 scroll_regions,
+                border_regions,
             })
             .is_ok())
     }
@@ -6418,11 +6447,13 @@ mod tests {
                 buffer_id,
                 entries,
                 scroll_regions,
+                border_regions,
             } => {
                 assert_eq!(buffer_id.0, 5);
                 assert_eq!(entries.len(), 1);
                 assert_eq!(entries[0].text, "New content\n");
                 assert!(scroll_regions.is_empty());
+                assert!(border_regions.is_empty());
             }
             _ => panic!("Expected SetVirtualBufferContent, got {:?}", cmd),
         }

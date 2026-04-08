@@ -2808,6 +2808,17 @@ function on_pkg_mouse_scroll(data: { buffer_id: number; delta: number; col: numb
 registerHandler("on_pkg_mouse_scroll", on_pkg_mouse_scroll);
 editor.on("mouse_scroll", "on_pkg_mouse_scroll");
 
+function on_pkg_region_scroll(data: { buffer_id: number; region_id: string; offset: number }): void {
+  if (!pkgState.isOpen || pkgState.bufferId === null) return;
+  if (data.buffer_id !== pkgState.bufferId) return;
+  if (data.region_id === "pkg-list") {
+    pkgState.listScroll.offset = data.offset;
+    updatePkgManagerView();
+  }
+}
+registerHandler("on_pkg_region_scroll", on_pkg_region_scroll);
+editor.on("on_region_scroll", "on_pkg_region_scroll");
+
 function on_pkg_resize(): void {
   if (!pkgState.isOpen) return;
   const viewport = editor.getViewport();

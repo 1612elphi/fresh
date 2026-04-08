@@ -560,6 +560,66 @@ impl Editor {
             .get_separators_with_ids(editor_content_area);
         self.cached_layout.editor_content_area = Some(editor_content_area);
 
+        // Compute scroll region and border hit areas from buffer state
+        {
+            use crate::view::ui::scrollbar::ScrollbarState;
+            let mut sr_areas = Vec::new();
+            let mut br_areas = Vec::new();
+            for (split_id, buffer_id, content_rect, _, _, _) in &self.cached_layout.split_areas {
+                if let Some(state) = self.buffers.get(buffer_id) {
+                    for region in &state.scroll_regions {
+                        if region.total_lines <= region.height as usize {
+                            continue;
+                        }
+                        let sb_x = content_rect.x + region.x + region.width.saturating_sub(1);
+                        let sb_y = content_rect.y + region.y;
+                        let sb_h = region
+                            .height
+                            .min((content_rect.y + content_rect.height).saturating_sub(sb_y));
+                        if sb_h == 0
+                            || sb_x >= content_rect.x + content_rect.width
+                            || sb_y >= content_rect.y + content_rect.height
+                        {
+                            continue;
+                        }
+                        let sb_rect = ratatui::layout::Rect::new(sb_x, sb_y, 1, sb_h);
+                        let sb_state = ScrollbarState::new(
+                            region.total_lines,
+                            region.height as usize,
+                            region.offset,
+                        );
+                        let (thumb_start, thumb_size) = sb_state.thumb_geometry(sb_h as usize);
+                        sr_areas.push(crate::app::types::ScrollRegionHitArea {
+                            region_id: region.id.clone(),
+                            buffer_id: *buffer_id,
+                            split_id: *split_id,
+                            scrollbar_rect: sb_rect,
+                            thumb_start,
+                            thumb_end: thumb_start + thumb_size,
+                            total_lines: region.total_lines,
+                            visible_lines: region.height as usize,
+                            current_offset: region.offset,
+                        });
+                    }
+                    for border in &state.border_regions {
+                        let abs_x = content_rect.x + border.x;
+                        let abs_y = content_rect.y + border.y;
+                        br_areas.push(crate::app::types::PanelBorderHitArea {
+                            border_id: border.id.clone(),
+                            buffer_id: *buffer_id,
+                            split_id: *split_id,
+                            direction: border.direction.clone(),
+                            x: abs_x,
+                            y: abs_y,
+                            length: border.length,
+                        });
+                    }
+                }
+            }
+            self.cached_layout.scroll_region_areas = sr_areas;
+            self.cached_layout.panel_border_areas = br_areas;
+        }
+
         // Render hover highlights for separators and scrollbars
         self.render_hover_highlights(frame);
 
@@ -1262,6 +1322,26 @@ impl Editor {
                         );
                     }
                 }
+            }
+            Some(HoverTarget::ScrollRegionThumb(region_id)) => {
+                super::scroll_region_mouse::render_scroll_region_thumb_hover(
+                    frame,
+                    &self.cached_layout.scroll_region_areas,
+                    region_id,
+                    &self.theme,
+                );
+            }
+            Some(HoverTarget::ScrollRegionTrack(_region_id)) => {
+                // Track hover - could show a single-cell highlight like buffer scrollbar
+                // For now, no visual feedback on track hover
+            }
+            Some(HoverTarget::PanelBorder(border_id)) => {
+                super::scroll_region_mouse::render_panel_border_hover(
+                    frame,
+                    &self.cached_layout.panel_border_areas,
+                    border_id,
+                    &self.theme,
+                );
             }
             // Menu hover is handled by MenuRenderer
             _ => {}
