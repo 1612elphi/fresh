@@ -6118,7 +6118,7 @@ impl Editor {
                 }
 
                 // Now set the content
-                match self.set_virtual_buffer_content(buffer_id, entries) {
+                match self.set_virtual_buffer_content(buffer_id, entries, Vec::new()) {
                     Ok(()) => {
                         tracing::debug!("Set virtual buffer content for {:?}", buffer_id);
                         // Switch to the new buffer to display it
@@ -6170,9 +6170,11 @@ impl Editor {
                         // Verify the buffer actually exists (defensive check for stale entries)
                         if self.buffers.contains_key(&existing_buffer_id) {
                             // Panel exists, just update its content
-                            if let Err(e) =
-                                self.set_virtual_buffer_content(existing_buffer_id, entries)
-                            {
+                            if let Err(e) = self.set_virtual_buffer_content(
+                                existing_buffer_id,
+                                entries,
+                                Vec::new(),
+                            ) {
                                 tracing::error!("Failed to update panel content: {}", e);
                             } else {
                                 tracing::info!("Updated existing panel '{}' content", pid);
@@ -6245,7 +6247,7 @@ impl Editor {
                 }
 
                 // Set the content
-                if let Err(e) = self.set_virtual_buffer_content(buffer_id, entries) {
+                if let Err(e) = self.set_virtual_buffer_content(buffer_id, entries, Vec::new()) {
                     tracing::error!("Failed to set virtual buffer content: {}", e);
                     return Ok(());
                 }
@@ -6315,16 +6317,18 @@ impl Editor {
                     );
                 }
             }
-            PluginCommand::SetVirtualBufferContent { buffer_id, entries } => {
-                match self.set_virtual_buffer_content(buffer_id, entries) {
-                    Ok(()) => {
-                        tracing::debug!("Set virtual buffer content for {:?}", buffer_id);
-                    }
-                    Err(e) => {
-                        tracing::error!("Failed to set virtual buffer content: {}", e);
-                    }
+            PluginCommand::SetVirtualBufferContent {
+                buffer_id,
+                entries,
+                scroll_regions,
+            } => match self.set_virtual_buffer_content(buffer_id, entries, scroll_regions) {
+                Ok(()) => {
+                    tracing::debug!("Set virtual buffer content for {:?}", buffer_id);
                 }
-            }
+                Err(e) => {
+                    tracing::error!("Failed to set virtual buffer content: {}", e);
+                }
+            },
             PluginCommand::GetTextPropertiesAtCursor { buffer_id } => {
                 // Get text properties at cursor and fire a hook with the data
                 if let Some(state) = self.buffers.get(&buffer_id) {
@@ -6373,7 +6377,7 @@ impl Editor {
                 }
 
                 // Set the content
-                if let Err(e) = self.set_virtual_buffer_content(buffer_id, entries) {
+                if let Err(e) = self.set_virtual_buffer_content(buffer_id, entries, Vec::new()) {
                     tracing::error!("Failed to set virtual buffer content: {}", e);
                     return Ok(());
                 }

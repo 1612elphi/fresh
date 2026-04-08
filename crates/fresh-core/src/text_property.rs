@@ -86,6 +86,35 @@ pub struct InlineOverlay {
     pub properties: HashMap<String, serde_json::Value>,
 }
 
+/// A scroll region within a virtual buffer.
+///
+/// Plugins declare scroll regions to get per-region scrollbar rendering
+/// and mouse event routing. Each region describes a rectangular area
+/// within the virtual buffer's content that has its own scrollable content.
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, rename_all = "camelCase")]
+pub struct ScrollRegion {
+    /// Unique identifier for this region (e.g., "files", "diff")
+    pub id: String,
+    /// Column offset within the virtual buffer content
+    pub x: u16,
+    /// Row offset within the virtual buffer content
+    pub y: u16,
+    /// Width of the scrollable area in columns
+    #[serde(rename = "w")]
+    #[ts(rename = "w")]
+    pub width: u16,
+    /// Height of the scrollable area in rows
+    #[serde(rename = "h")]
+    #[ts(rename = "h")]
+    pub height: u16,
+    /// Total number of content lines (may exceed visible height)
+    pub total_lines: usize,
+    /// Current scroll offset (first visible line index)
+    pub offset: usize,
+}
+
 /// An entry with text and its properties
 #[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]

@@ -1339,6 +1339,45 @@ impl SplitRenderer {
                     (0, 0)
                 };
 
+                // Render per-region scrollbars for virtual buffer scroll regions
+                if !state.scroll_regions.is_empty() {
+                    use super::scrollbar::{
+                        render_scrollbar as render_sb, ScrollbarColors, ScrollbarState,
+                    };
+                    let sb_colors = ScrollbarColors::from_theme(theme);
+                    for region in &state.scroll_regions {
+                        if region.total_lines <= region.height as usize {
+                            continue; // No scrollbar needed
+                        }
+                        // Translate region-local coords to absolute screen coords.
+                        // Scrollbar is the rightmost column of the region.
+                        let sb_x =
+                            layout.content_rect.x + region.x + region.width.saturating_sub(1);
+                        let sb_y = layout.content_rect.y + region.y;
+                        let sb_h = region.height;
+                        // Clamp to content rect bounds
+                        if sb_x >= layout.content_rect.x + layout.content_rect.width
+                            || sb_y >= layout.content_rect.y + layout.content_rect.height
+                        {
+                            continue;
+                        }
+                        let clamped_h = sb_h.min(
+                            (layout.content_rect.y + layout.content_rect.height)
+                                .saturating_sub(sb_y),
+                        );
+                        if clamped_h == 0 {
+                            continue;
+                        }
+                        let sb_rect = Rect::new(sb_x, sb_y, 1, clamped_h);
+                        let sb_state = ScrollbarState::new(
+                            region.total_lines,
+                            region.height as usize,
+                            region.offset,
+                        );
+                        render_sb(frame, sb_rect, &sb_state, &sb_colors);
+                    }
+                }
+
                 // Compute the actual max line length for horizontal scrollbar
                 let max_content_width = if show_horizontal_scrollbar && !viewport.line_wrap_enabled
                 {

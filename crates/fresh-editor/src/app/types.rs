@@ -908,6 +908,14 @@ impl CachedLayout {
         self.cell_theme_map.get(idx)
     }
 
+    /// Get the content rect for a split by its ID
+    pub fn split_content_rect(&self, split_id: LeafId) -> Option<Rect> {
+        self.split_areas
+            .iter()
+            .find(|(sid, _, _, _, _, _)| *sid == split_id)
+            .map(|(_, _, content_rect, _, _, _)| *content_rect)
+    }
+
     /// Find which visual row contains the given byte position for a split
     pub fn find_visual_row(&self, split_id: LeafId, byte_pos: usize) -> Option<usize> {
         let mappings = self.view_line_mappings.get(&split_id)?;

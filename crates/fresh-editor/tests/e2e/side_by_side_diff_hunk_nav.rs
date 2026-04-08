@@ -65,7 +65,11 @@ fn setup_diff(
             .create_virtual_buffer("OLD".to_string(), "text".to_string(), true);
     harness
         .editor_mut()
-        .set_virtual_buffer_content(old_buffer_id, vec![TextPropertyEntry::text(old_content)])
+        .set_virtual_buffer_content(
+            old_buffer_id,
+            vec![TextPropertyEntry::text(old_content)],
+            Vec::new(),
+        )
         .unwrap();
 
     let new_buffer_id =
@@ -74,7 +78,11 @@ fn setup_diff(
             .create_virtual_buffer("NEW".to_string(), "text".to_string(), true);
     harness
         .editor_mut()
-        .set_virtual_buffer_content(new_buffer_id, vec![TextPropertyEntry::text(new_content)])
+        .set_virtual_buffer_content(
+            new_buffer_id,
+            vec![TextPropertyEntry::text(new_content)],
+            Vec::new(),
+        )
         .unwrap();
 
     let sources = vec![
@@ -250,7 +258,11 @@ fn setup_diff_with_initial_focus(
             .create_virtual_buffer("OLD".to_string(), "text".to_string(), true);
     harness
         .editor_mut()
-        .set_virtual_buffer_content(old_buffer_id, vec![TextPropertyEntry::text(old_content)])
+        .set_virtual_buffer_content(
+            old_buffer_id,
+            vec![TextPropertyEntry::text(old_content)],
+            Vec::new(),
+        )
         .unwrap();
 
     let new_buffer_id =
@@ -259,7 +271,11 @@ fn setup_diff_with_initial_focus(
             .create_virtual_buffer("NEW".to_string(), "text".to_string(), true);
     harness
         .editor_mut()
-        .set_virtual_buffer_content(new_buffer_id, vec![TextPropertyEntry::text(new_content)])
+        .set_virtual_buffer_content(
+            new_buffer_id,
+            vec![TextPropertyEntry::text(new_content)],
+            Vec::new(),
+        )
         .unwrap();
 
     let sources = vec![
@@ -404,7 +420,11 @@ fn test_flush_layout_enables_hunk_nav_before_render() {
             .create_virtual_buffer("OLD2".to_string(), "text".to_string(), true);
     harness
         .editor_mut()
-        .set_virtual_buffer_content(old_buffer_id, vec![TextPropertyEntry::text(&old_content)])
+        .set_virtual_buffer_content(
+            old_buffer_id,
+            vec![TextPropertyEntry::text(&old_content)],
+            Vec::new(),
+        )
         .unwrap();
 
     let new_buffer_id =
@@ -413,7 +433,11 @@ fn test_flush_layout_enables_hunk_nav_before_render() {
             .create_virtual_buffer("NEW2".to_string(), "text".to_string(), true);
     harness
         .editor_mut()
-        .set_virtual_buffer_content(new_buffer_id, vec![TextPropertyEntry::text(&new_content)])
+        .set_virtual_buffer_content(
+            new_buffer_id,
+            vec![TextPropertyEntry::text(&new_content)],
+            Vec::new(),
+        )
         .unwrap();
 
     let sources = vec![
@@ -488,7 +512,11 @@ fn test_flush_layout_jump_to_third_hunk_before_render() {
             .create_virtual_buffer("OLD".to_string(), "text".to_string(), true);
     harness
         .editor_mut()
-        .set_virtual_buffer_content(old_buffer_id, vec![TextPropertyEntry::text(&old_content)])
+        .set_virtual_buffer_content(
+            old_buffer_id,
+            vec![TextPropertyEntry::text(&old_content)],
+            Vec::new(),
+        )
         .unwrap();
 
     let new_buffer_id =
@@ -497,7 +525,11 @@ fn test_flush_layout_jump_to_third_hunk_before_render() {
             .create_virtual_buffer("NEW".to_string(), "text".to_string(), true);
     harness
         .editor_mut()
-        .set_virtual_buffer_content(new_buffer_id, vec![TextPropertyEntry::text(&new_content)])
+        .set_virtual_buffer_content(
+            new_buffer_id,
+            vec![TextPropertyEntry::text(&new_content)],
+            Vec::new(),
+        )
         .unwrap();
 
     let sources = vec![

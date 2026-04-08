@@ -588,6 +588,26 @@ fn parse_text_property_entry(
     })
 }
 
+/// Parse a ScrollRegion from a JS Object
+fn parse_scroll_region(obj: &Object<'_>) -> Option<fresh_core::text_property::ScrollRegion> {
+    let id: String = obj.get("id").ok()?;
+    let x: u16 = obj.get("x").ok()?;
+    let y: u16 = obj.get("y").ok()?;
+    let width: u16 = obj.get("w").ok()?;
+    let height: u16 = obj.get("h").ok()?;
+    let total_lines: usize = obj.get("totalLines").ok()?;
+    let offset: usize = obj.get("offset").ok()?;
+    Some(fresh_core::text_property::ScrollRegion {
+        id,
+        x,
+        y,
+        width,
+        height,
+        total_lines,
+        offset,
+    })
+}
+
 /// Pending response senders type alias
 pub type PendingResponses =
     Arc<std::sync::Mutex<HashMap<u64, tokio::sync::oneshot::Sender<PluginResponse>>>>;
@@ -3387,7 +3407,7 @@ impl JsEditorApi {
         Ok(id)
     }
 
-    /// Set virtual buffer content (takes array of entry objects)
+    /// Set virtual buffer content (takes array of entry objects, optional options with scrollRegions)
     ///
     /// Note: entries should be TextPropertyEntry[] - uses manual parsing for HashMap support
     pub fn set_virtual_buffer_content<'js>(
@@ -3395,16 +3415,34 @@ impl JsEditorApi {
         ctx: rquickjs::Ctx<'js>,
         buffer_id: u32,
         entries_arr: Vec<rquickjs::Object<'js>>,
+        options: rquickjs::function::Opt<rquickjs::Object<'js>>,
     ) -> rquickjs::Result<bool> {
         let entries: Vec<TextPropertyEntry> = entries_arr
             .iter()
             .filter_map(|obj| parse_text_property_entry(&ctx, obj))
             .collect();
+
+        // Parse optional scroll regions from options.scrollRegions
+        let scroll_regions = if let Some(opts) = options.0 {
+            opts.get::<_, rquickjs::Array>("scrollRegions")
+                .ok()
+                .map(|arr| {
+                    arr.iter::<rquickjs::Object>()
+                        .flatten()
+                        .filter_map(|obj| parse_scroll_region(&obj))
+                        .collect()
+                })
+                .unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+
         Ok(self
             .command_sender
             .send(PluginCommand::SetVirtualBufferContent {
                 buffer_id: BufferId(buffer_id as usize),
                 entries,
+                scroll_regions,
             })
             .is_ok())
     }
@@ -6376,10 +6414,15 @@ mod tests {
 
         let cmd = rx.try_recv().unwrap();
         match cmd {
-            PluginCommand::SetVirtualBufferContent { buffer_id, entries } => {
+            PluginCommand::SetVirtualBufferContent {
+                buffer_id,
+                entries,
+                scroll_regions,
+            } => {
                 assert_eq!(buffer_id.0, 5);
                 assert_eq!(entries.len(), 1);
                 assert_eq!(entries[0].text, "New content\n");
+                assert!(scroll_regions.is_empty());
             }
             _ => panic!("Expected SetVirtualBufferContent, got {:?}", cmd),
         }

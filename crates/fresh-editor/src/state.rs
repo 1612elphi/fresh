@@ -195,6 +195,10 @@ pub struct EditorState {
     /// Whether this buffer is a composite view (e.g., side-by-side diff)
     pub is_composite_buffer: bool,
 
+    /// Scroll regions for per-region scrollbar rendering in virtual buffers.
+    /// Set by plugins via `setVirtualBufferContent()` with scroll region metadata.
+    pub scroll_regions: Vec<fresh_core::text_property::ScrollRegion>,
+
     /// Debug mode: reveal highlight/overlay spans (WordPerfect-style)
     pub debug_highlight_mode: bool,
 
@@ -290,6 +294,7 @@ impl EditorState {
             buffer_settings: BufferSettings::default(),
             reference_highlighter: ReferenceHighlighter::new(),
             is_composite_buffer: false,
+            scroll_regions: Vec::new(),
             debug_highlight_mode: false,
             reference_highlight_overlay: ReferenceHighlightOverlay::new(),
             bracket_highlight_overlay: BracketHighlightOverlay::new(),

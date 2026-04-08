@@ -1319,6 +1319,8 @@ pub enum PluginCommand {
         buffer_id: BufferId,
         /// Entries with text and embedded properties
         entries: Vec<TextPropertyEntry>,
+        /// Optional scroll regions for per-region scrollbar rendering
+        scroll_regions: Vec<crate::text_property::ScrollRegion>,
     },
 
     /// Get text properties at the cursor position in a buffer
@@ -2710,8 +2712,13 @@ impl PluginApi {
         &self,
         buffer_id: BufferId,
         entries: Vec<TextPropertyEntry>,
+        scroll_regions: Vec<crate::text_property::ScrollRegion>,
     ) -> Result<(), String> {
-        self.send_command(PluginCommand::SetVirtualBufferContent { buffer_id, entries })
+        self.send_command(PluginCommand::SetVirtualBufferContent {
+            buffer_id,
+            entries,
+            scroll_regions,
+        })
     }
 
     /// Get text properties at cursor position in a buffer

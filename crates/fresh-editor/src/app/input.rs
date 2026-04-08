@@ -1470,6 +1470,28 @@ impl Editor {
             .split_at_position(col, row)
             .unwrap_or_else(|| (self.split_manager.active_split(), self.active_buffer()));
 
+        // Check if mouse is over a scroll region in a virtual buffer.
+        // If so, the plugin's mouse_scroll handler manages it — skip default scroll.
+        if let Some(state) = self.buffers.get(&buffer_id) {
+            if !state.scroll_regions.is_empty() {
+                // Find the content rect for this split to translate screen→buffer coords
+                if let Some(content_rect) = self.cached_layout.split_content_rect(target_split) {
+                    let local_col = col.saturating_sub(content_rect.x);
+                    let local_row = row.saturating_sub(content_rect.y);
+                    for region in &state.scroll_regions {
+                        if local_col >= region.x
+                            && local_col < region.x + region.width
+                            && local_row >= region.y
+                            && local_row < region.y + region.height
+                        {
+                            // Mouse is within a scroll region — plugin handles this
+                            return Ok(());
+                        }
+                    }
+                }
+            }
+        }
+
         // Check if this is a composite buffer - if so, use composite scroll
         if self.is_composite_buffer(buffer_id) {
             let max_row = self

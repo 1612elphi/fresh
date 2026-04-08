@@ -1419,6 +1419,7 @@ impl Editor {
         &mut self,
         buffer_id: BufferId,
         entries: Vec<crate::primitives::text_property::TextPropertyEntry>,
+        scroll_regions: Vec<fresh_core::text_property::ScrollRegion>,
     ) -> Result<(), String> {
         // Save current cursor position from split view state to preserve it after content update
         let old_cursor_pos = self
@@ -1455,6 +1456,9 @@ impl Editor {
 
         // Set text properties
         state.text_properties = properties;
+
+        // Set scroll regions for per-region scrollbar rendering
+        state.scroll_regions = scroll_regions;
 
         // Create inline overlays for the new content
         {

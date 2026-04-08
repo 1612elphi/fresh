@@ -30,7 +30,11 @@ fn setup_side_by_side_diff(
     // Set content on the old buffer
     harness
         .editor_mut()
-        .set_virtual_buffer_content(old_buffer_id, vec![TextPropertyEntry::text(old_content)])
+        .set_virtual_buffer_content(
+            old_buffer_id,
+            vec![TextPropertyEntry::text(old_content)],
+            Vec::new(),
+        )
         .unwrap();
 
     let new_buffer_id =
@@ -41,7 +45,11 @@ fn setup_side_by_side_diff(
     // Set content on the new buffer
     harness
         .editor_mut()
-        .set_virtual_buffer_content(new_buffer_id, vec![TextPropertyEntry::text(new_content)])
+        .set_virtual_buffer_content(
+            new_buffer_id,
+            vec![TextPropertyEntry::text(new_content)],
+            Vec::new(),
+        )
         .unwrap();
 
     // Create composite buffer with side-by-side layout
