@@ -480,6 +480,383 @@ and `cargo fmt`.
 - Test isolation: tests run in parallel with internal clipboard mode
   and per-test temp directories.
 
+## Scrollbar Click/Drag and Panel Border Resize
+
+### Problem
+
+The initial scroll region implementation renders per-region scrollbars
+and routes mouse wheel events, but does not handle:
+
+1. **Scrollbar click** — clicking the scrollbar track should jump to
+   that position in the scroll region.
+2. **Scrollbar drag** — dragging the scrollbar thumb should smoothly
+   scroll the region.
+3. **Panel border drag** — dragging the divider between panels should
+   resize them (e.g., making the file list wider and the diff narrower).
+
+### Existing Mouse Infrastructure
+
+The editor has well-established patterns for these interactions:
+
+- **Split separator drag** (`mouse_input.rs:1785`): hit-test 1-pixel
+  lines in `CachedLayout.separator_areas`, track `dragging_separator`
+  + `drag_start_ratio`, apply delta on each move via
+  `split_manager.set_ratio()`.
+- **Scrollbar click/drag** (`mouse_input.rs:1587`): hit-test scrollbar
+  rects in `CachedLayout.split_areas`, distinguish thumb vs track
+  clicks. Thumb drag stores `drag_start_row` + `drag_start_top_byte`
+  and applies relative movement. Track click calls
+  `handle_scrollbar_jump()` which maps click position to scroll ratio.
+- **File explorer border** (`mouse_input.rs:1558`): single-column
+  border at right edge of explorer area, drag adjusts
+  `file_explorer_width_percent`.
+- **Hover feedback** (`render.rs:1176`): `HoverTarget` enum drives
+  visual highlighting (separator color change on hover).
+
+All follow the same pattern: cached layout areas → hit test on click →
+set drag state in `MouseState` → process drag moves → clear on release.
+
+### Alternatives for Scrollbar Click/Drag
+
+#### A: Core handles scrollbar interaction directly
+
+The core tracks per-region scrollbar areas in `CachedLayout`, performs
+hit testing, manages drag state, computes the new scroll offset, and
+fires an `on_region_scroll` event to the plugin with the new offset.
+
+**How it works:**
+- Rendering stores per-region scrollbar rects + thumb positions in
+  `CachedLayout.scroll_region_areas`.
+- `handle_mouse_click()` checks these areas (between popups and split
+  scrollbars in priority order).
+- Track click: compute ratio from click position, convert to scroll
+  offset, fire `on_region_scroll(id, offset)`.
+- Thumb drag: store `drag_start_row` + `drag_start_offset`, compute
+  relative movement, fire `on_region_scroll(id, offset)` on each move.
+- Plugin receives the event, updates its scroll state, calls
+  `update()`.
+
+| Pro | Con |
+|-----|-----|
+| Consistent with existing scrollbar interaction | Core computes scroll offsets it doesn't own |
+| Exact same UX as buffer scrollbars | Must store per-region scrollbar geometry in CachedLayout |
+| Drag is smooth (core handles per-frame) | New drag state fields in MouseState |
+| Works for any plugin without plugin-side code | Round-trip latency: core → plugin → re-render |
+
+#### B: Plugin handles scrollbar interaction via mouse hooks
+
+The existing `mouse_click` and `mouse_move` hooks fire to plugins with
+screen coordinates. The plugin (or TS framework) performs hit testing
+against its known scroll region rects.
+
+**How it works:**
+- Plugin receives `mouse_click(col, row)` and `mouse_move(col, row)`.
+- Framework checks if click is within a scroll region's rightmost
+  column (the scrollbar column).
+- On click: compute scroll ratio, update ScrollState, re-render.
+- On drag: framework tracks its own drag state in TypeScript, computes
+  delta, updates ScrollState, re-renders on each move.
+
+| Pro | Con |
+|-----|-----|
+| No core Rust changes | Plugin must implement drag state machine |
+| Flexible: plugin can customize scroll behavior | No visual hover feedback (core renders scrollbar, can't highlight thumb without round-trip) |
+| Faster iteration (TypeScript only) | Drag smoothness limited by TS→core→render round-trip latency |
+| | Plugin must know absolute screen coords of scroll regions (needs content_rect offset from core) |
+
+**Selected: A (core handles scrollbar interaction)** because:
+- Scrollbar interaction is a rendering concern (thumb highlight,
+  smooth drag) that the core handles best.
+- It exactly parallels the existing scrollbar infrastructure.
+- Plugins get correct behavior for free.
+
+### Alternatives for Panel Border Resize
+
+#### A: Core detects borders, plugin handles resize
+
+The core provides a new `interactiveRegions` concept alongside
+`scrollRegions`. Plugins declare border regions (position, orientation).
+The core performs hit testing and fires events. The plugin adjusts its
+layout sizes in response.
+
+**How it works:**
+- Plugin passes `borderRegions` in `setVirtualBufferContent()`:
+  ```typescript
+  borderRegions: [
+    { id: "main-divider", x: 30, y: 2, length: 20, direction: "v" }
+  ]
+  ```
+- Core stores these in `CachedLayout`, hit-tests on click/hover.
+- Hover: core highlights the border column/row (like split separators).
+- Click: core sets `dragging_panel_border` state.
+- Drag: core fires `on_border_drag(id, delta)` to plugin on each move.
+- Plugin adjusts its LayoutSize (e.g., changes left panel width from
+  `fixed(30)` to `fixed(30 + delta)`) and re-renders.
+- Release: core fires `on_border_drag_end(id)`.
+
+| Pro | Con |
+|-----|-----|
+| Hover feedback (highlight) handled by core | New `borderRegions` API surface |
+| Drag smoothness handled by core | Plugin must re-render on each drag event (could lag) |
+| Consistent with split separator pattern | Core knows about "panels" (leaky abstraction) |
+| Plugin has full control over resize behavior | |
+
+#### B: Core detects borders via scroll region inference
+
+Instead of explicit border declarations, the core infers borders from
+adjacent scroll regions. The gap between two horizontally adjacent
+scroll regions is a vertical border; the gap between two vertically
+adjacent regions is a horizontal border.
+
+**How it works:**
+- Core examines pairs of scroll regions. If region A's right edge is
+  1-2 columns from region B's left edge, there's a vertical border
+  between them.
+- Core performs hit testing on the inferred border area.
+- Events fire to plugin as in option A.
+
+| Pro | Con |
+|-----|-----|
+| No additional API — inferred from existing scroll regions | Fragile: inference can be wrong (non-adjacent regions, gaps) |
+| Plugins don't need to declare borders | Can't handle borders between a scroll panel and a fixed area |
+| | Hard to reason about — implicit behavior |
+
+#### C: Plugin handles everything via mouse hooks
+
+No core involvement. The TS framework tracks mouse events, performs
+hit testing against divider positions, manages drag state, adjusts
+layout sizes, and re-renders.
+
+**How it works:**
+- Framework registers `mouse_click`, `mouse_move`, `mouse_up` handlers.
+- On click: check if click is on a divider column (framework knows
+  divider positions from the layout tree).
+- On drag: track start position and compute delta, adjust the adjacent
+  panels' sizes, re-render.
+
+| Pro | Con |
+|-----|-----|
+| Zero core changes | No hover feedback (can't highlight divider on hover without full re-render) |
+| Framework has complete control | Drag smoothness limited by TS round-trip |
+| Works today with existing hooks | Need `mouse_up` hook (may not exist) |
+| Simplest implementation | No cursor shape change on hover |
+
+#### D: Hybrid — core provides generic interactive regions
+
+Generalize scroll regions and border regions into a single
+`interactiveRegions` concept. Each region has a type (scrollbar,
+border, button) and the core provides hit testing + hover feedback +
+drag state for all of them. Plugin receives typed events.
+
+```typescript
+interactiveRegions: [
+  { id: "files-scroll", type: "scrollbar", rect: {...}, totalLines, offset },
+  { id: "divider", type: "v-border", x: 30, y: 2, length: 20 },
+  { id: "toolbar-btn", type: "click", rect: {...} },
+]
+```
+
+| Pro | Con |
+|-----|-----|
+| One unified system for all interactive areas | Larger API surface (type union) |
+| Core provides hover feedback for all types | More complex rendering and hit testing |
+| Extensible to future interaction types | Over-engineered for current needs? |
+| Consistent behavior across all interactive regions | |
+
+### Selected Approach
+
+**Scrollbar click/drag: Alternative A** — core handles it, consistent
+with existing scrollbar infrastructure. ~100 LoC Rust.
+
+**Panel border resize: Alternative A** (explicit border regions) with
+the option to evolve toward **D** (generic interactive regions) if
+more interaction types emerge. The explicit approach is simpler now,
+and the API shape (`borderRegions: [{ id, x, y, length, direction }]`)
+is forward-compatible with a future generic system.
+
+**Not selected: B** (inference) because implicit behavior is fragile.
+**Not selected: C** (plugin-only) because hover feedback matters for
+discoverability — users need to see the border highlight to know they
+can drag it.
+
+### Implementation Design
+
+#### CachedLayout Extensions
+
+```rust
+// Per-region scrollbar hit areas (populated during rendering)
+pub scroll_region_areas: Vec<ScrollRegionHitArea>,
+
+// Panel border hit areas (populated from plugin metadata)
+pub panel_border_areas: Vec<PanelBorderHitArea>,
+
+struct ScrollRegionHitArea {
+    region_id: String,
+    buffer_id: BufferId,
+    split_id: LeafId,
+    scrollbar_rect: Rect,      // 1-column rect for the scrollbar
+    thumb_start: usize,
+    thumb_end: usize,
+    total_lines: usize,
+    visible_lines: usize,
+    current_offset: usize,
+}
+
+struct PanelBorderHitArea {
+    region_id: String,
+    buffer_id: BufferId,
+    split_id: LeafId,
+    direction: BorderDirection,  // Vertical or Horizontal
+    x: u16,
+    y: u16,
+    length: u16,
+}
+```
+
+#### MouseState Extensions
+
+```rust
+// Per-region scrollbar drag
+pub dragging_scroll_region: Option<String>,    // region id
+pub drag_scroll_region_split: Option<LeafId>,
+pub drag_scroll_region_start_row: Option<u16>,
+pub drag_scroll_region_start_offset: Option<usize>,
+
+// Panel border drag
+pub dragging_panel_border: Option<String>,     // border id
+pub drag_panel_border_split: Option<LeafId>,
+pub drag_panel_border_start_pos: Option<u16>,  // col or row
+```
+
+#### HoverTarget Extensions
+
+```rust
+ScrollRegionThumb(String),     // region id
+ScrollRegionTrack(String),     // region id
+PanelBorder(String),           // border id
+```
+
+#### Plugin API Extensions
+
+```typescript
+// Extend setVirtualBufferContent options
+editor.setVirtualBufferContent(bufferId, entries, {
+  scrollRegions: [...],
+  borderRegions: [
+    { id: "divider", x: 30, y: 2, length: 20, direction: "v" },
+  ],
+});
+
+// New plugin events
+// Fired when user clicks track or drags thumb to a new position
+registerHandler("on_region_scroll", (data: {
+  regionId: string;
+  offset: number;     // New scroll offset (line index)
+}) => { ... });
+
+// Fired during panel border drag (each mouse move)
+registerHandler("on_border_drag", (data: {
+  borderId: string;
+  delta: number;      // Pixels moved from start (positive = right/down)
+}) => { ... });
+
+// Fired when border drag ends
+registerHandler("on_border_drag_end", (data: {
+  borderId: string;
+  delta: number;      // Final delta
+}) => { ... });
+```
+
+#### Click Dispatch Priority
+
+In `handle_mouse_click()`, per-region scrollbar hits are checked after
+popup scrollbars but **before** the main buffer scrollbar check:
+
+```
+  ...
+  9. File explorer border
+  10. File explorer content
+  11. *** Per-region scrollbar hit (NEW) ***
+  12. Main buffer vertical scrollbar
+  13. *** Panel border hit (NEW) ***
+  14. Main buffer horizontal scrollbar
+  15. Split separators
+  ...
+```
+
+Per-region scrollbars take priority over the main scrollbar because
+when scroll regions are present, the main scrollbar is hidden. Panel
+borders are checked before split separators because they're visually
+inside the split content area.
+
+#### Hover Rendering
+
+- **ScrollRegionThumb**: re-render the scrollbar column with
+  `ScrollbarColors::from_theme_hover()` (brighter thumb color).
+- **PanelBorder**: re-render the border column/row with the separator
+  hover color (`theme.split_separator_hover_fg`), consistent with
+  split separator hover feedback.
+
+#### Scroll Offset Calculation
+
+For scrollbar track click:
+```rust
+let relative_row = click_row - scrollbar_rect.y;
+let ratio = relative_row as f64 / (scrollbar_rect.height - 1) as f64;
+let max_offset = total_lines - visible_lines;
+let new_offset = (ratio * max_offset as f64) as usize;
+```
+
+For scrollbar thumb drag:
+```rust
+let row_delta = current_row as i32 - drag_start_row as i32;
+let rows_per_line = scrollbar_height as f64 / total_lines as f64;
+let line_delta = (row_delta as f64 / rows_per_line) as isize;
+let new_offset = (start_offset as isize + line_delta).clamp(0, max_offset);
+```
+
+The core fires `on_region_scroll(id, new_offset)`. The plugin updates
+its ScrollState and calls update().
+
+#### Border Delta Calculation
+
+For panel border drag:
+```rust
+let delta = match direction {
+    BorderDirection::Vertical => col as i32 - start_col as i32,
+    BorderDirection::Horizontal => row as i32 - start_row as i32,
+};
+```
+
+The core fires `on_border_drag(id, delta)`. The plugin adjusts its
+layout sizes:
+```typescript
+function onBorderDrag(data: { borderId: string; delta: number }) {
+  if (data.borderId === "divider") {
+    leftPanelWidth = Math.max(20, Math.min(60, baseWidth + data.delta));
+    layout.update();
+  }
+}
+```
+
+### Why the Plugin Handles Resize, Not the Core
+
+The core fires raw `delta` events; the plugin decides how to apply
+them. This is deliberate:
+
+1. **Layout is plugin-owned.** The core doesn't know panel semantics
+   (which panel grows, which shrinks, minimum widths). The plugin
+   does.
+2. **Constraints are plugin-specific.** Min/max widths, aspect ratios,
+   snap-to-grid behavior, fixed vs flexible panels — all vary by
+   plugin.
+3. **Consistency with scroll regions.** Scroll state is plugin-owned;
+   resize state should be too. The core renders and routes events.
+
+The core's job is the same as for scroll regions: render the visual
+(scrollbar / border highlight), route the mouse interaction, fire
+events. The plugin owns the state.
+
 ## Relationship to Existing Infrastructure
 
 | Existing component | Role in this design |
