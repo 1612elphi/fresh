@@ -92,6 +92,7 @@ interface ReviewState {
   viewportWidth: number;
   viewportHeight: number;
   focusPanel: 'files' | 'diff';
+  leftWidthOverride: number | null;
 }
 
 const state: ReviewState = {
@@ -106,7 +107,13 @@ const state: ReviewState = {
   viewportWidth: 80,
   viewportHeight: 24,
   focusPanel: 'files',
+  leftWidthOverride: null,
 };
+
+function getReviewLeftWidth(): number {
+    if (state.leftWidthOverride !== null) return state.leftWidthOverride;
+    return Math.max(28, Math.floor(state.viewportWidth * 0.3));
+}
 
 // --- Refresh State ---
 
@@ -513,7 +520,7 @@ function buildMagitDisplayEntries(): TextPropertyEntry[] {
     const entries: TextPropertyEntry[] = [];
     const H = state.viewportHeight;
     const W = state.viewportWidth;
-    const leftWidth = Math.max(28, Math.floor(W * 0.3));
+    const leftWidth = getReviewLeftWidth();
     const rightWidth = W - leftWidth - 1; // 1 for divider
 
     const allFileLines = buildFileListLines();
@@ -635,7 +642,7 @@ function buildMagitDisplayEntries(): TextPropertyEntry[] {
 function buildReviewScrollRegions(): Array<{ id: string; x: number; y: number; w: number; h: number; totalLines: number; offset: number }> {
     const H = state.viewportHeight;
     const W = state.viewportWidth;
-    const leftWidth = Math.max(28, Math.floor(W * 0.3));
+    const leftWidth = getReviewLeftWidth();
     const rightWidth = W - leftWidth - 1;
     const mainRows = H - 2; // rows 2..H-1 (toolbar + header take 2)
 
@@ -672,13 +679,26 @@ function buildReviewScrollRegions(): Array<{ id: string; x: number; y: number; w
     return regions;
 }
 
+function buildReviewBorderRegions(): Array<{ id: string; x: number; y: number; length: number; direction: string }> {
+    const leftWidth = getReviewLeftWidth();
+    const mainRows = state.viewportHeight - 2;
+    return [{
+        id: "review-divider",
+        x: leftWidth,
+        y: 2,
+        length: mainRows,
+        direction: "v",
+    }];
+}
+
 function updateMagitDisplay(): void {
     if (state.reviewBufferId === null) return;
     refreshViewportDimensions();
     const entries = buildMagitDisplayEntries();
     const scrollRegions = buildReviewScrollRegions();
+    const borderRegions = buildReviewBorderRegions();
     editor.clearNamespace(state.reviewBufferId, "review-diff");
-    editor.setVirtualBufferContent(state.reviewBufferId, entries, { scrollRegions });
+    editor.setVirtualBufferContent(state.reviewBufferId, entries, { scrollRegions, borderRegions });
 }
 
 function review_refresh() { refreshMagitData(); }
@@ -947,7 +967,7 @@ function on_review_mouse_scroll(data: { buffer_id: number; delta: number; col: n
     if (data.buffer_id !== state.reviewBufferId) return;
 
     const W = state.viewportWidth;
-    const leftWidth = Math.max(28, Math.floor(W * 0.3));
+    const leftWidth = getReviewLeftWidth();
     const mainRows = state.viewportHeight - 2;
 
     if (data.col < leftWidth) {
@@ -985,6 +1005,19 @@ function on_review_region_scroll(data: { buffer_id: number; region_id: string; o
 }
 registerHandler("on_review_region_scroll", on_review_region_scroll);
 editor.on("on_region_scroll", "on_review_region_scroll");
+
+function on_review_border_drag(data: { buffer_id: number; border_id: string; delta: number }): void {
+    if (state.reviewBufferId === null || data.buffer_id !== state.reviewBufferId) return;
+    if (data.border_id !== "review-divider") return;
+    const currentLeft = getReviewLeftWidth();
+    const newLeft = Math.max(20, Math.min(state.viewportWidth - 20, currentLeft + data.delta));
+    if (newLeft !== currentLeft) {
+        state.leftWidthOverride = newLeft;
+        updateMagitDisplay();
+    }
+}
+registerHandler("on_review_border_drag", on_review_border_drag);
+editor.on("on_border_drag", "on_review_border_drag");
 
 /**
  * Represents an aligned line pair for side-by-side diff display

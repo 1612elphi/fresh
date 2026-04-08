@@ -61,8 +61,10 @@ type ColorValue = RGB | string;
 // Layout Constants & Panel Types
 // =============================================================================
 
-const LEFT_WIDTH = 38;
-const RIGHT_WIDTH = 61;
+let LEFT_WIDTH = 38;
+const MIN_LEFT_WIDTH = 20;
+const MAX_LEFT_WIDTH = 70;
+function RIGHT_WIDTH(): number { return Math.max(20, 99 - LEFT_WIDTH); }
 
 type PickerFocusTarget =
   | { type: "hex-input" }
@@ -893,7 +895,7 @@ function buildPickerLines(): PickerLine[] {
     } else {
       lines.push({ text: "No field selected", type: "picker-title" });
     }
-    lines.push({ text: "─".repeat(RIGHT_WIDTH - 2), type: "picker-separator" });
+    lines.push({ text: "─".repeat(RIGHT_WIDTH() - 2), type: "picker-separator" });
     lines.push({ text: "Select a color field to edit", type: "picker-desc" });
     return lines;
   }
@@ -901,7 +903,7 @@ function buildPickerLines(): PickerLine[] {
   // Field title
   lines.push({ text: `${field.path} - ${field.def.displayName}`, type: "picker-title" });
   lines.push({ text: `"${field.def.description}"`, type: "picker-desc" });
-  lines.push({ text: "─".repeat(RIGHT_WIDTH - 2), type: "picker-separator" });
+  lines.push({ text: "─".repeat(RIGHT_WIDTH() - 2), type: "picker-separator" });
 
   // Color value display
   const isNamed = typeof field.value === "string" && NAMED_COLORS[field.value] !== undefined;
@@ -942,7 +944,7 @@ function buildPickerLines(): PickerLine[] {
     lines.push({ text: rowText, type: "picker-palette-row", paletteRow: row });
   }
 
-  lines.push({ text: "─".repeat(RIGHT_WIDTH - 2), type: "picker-separator" });
+  lines.push({ text: "─".repeat(RIGHT_WIDTH() - 2), type: "picker-separator" });
 
   // Preview section
   lines.push({ text: "Preview:", type: "picker-label" });
@@ -1373,6 +1375,17 @@ function buildThemeScrollRegions(): Array<{ id: string; x: number; y: number; w:
   return regions;
 }
 
+function buildThemeBorderRegions(): Array<{ id: string; x: number; y: number; length: number; direction: string }> {
+  const treeVisibleRows = Math.max(8, state.viewportHeight - 2);
+  return [{
+    id: "theme-divider",
+    x: LEFT_WIDTH,
+    y: 0,
+    length: treeVisibleRows,
+    direction: "v",
+  }];
+}
+
 function updateDisplay(): void {
   if (state.bufferId === null) return;
   isUpdatingDisplay = true;
@@ -1384,7 +1397,8 @@ function updateDisplay(): void {
   // theme-sel markers from having wrong positions after the buffer replace
   editor.clearNamespace(state.bufferId, "theme-sel");
 
-  editor.setVirtualBufferContent(state.bufferId, entries, { scrollRegions });
+  const borderRegions = buildThemeBorderRegions();
+      editor.setVirtualBufferContent(state.bufferId, entries, { scrollRegions, borderRegions });
 
   // Selection highlights use a separate namespace via addOverlay (dynamic, position-dependent)
   applySelectionHighlighting(entries);
@@ -1557,7 +1571,8 @@ function onThemeColorPromptConfirmed(args: {
     const entries = buildDisplayEntries();
     if (state.bufferId !== null) {
       const scrollRegions = buildThemeScrollRegions();
-      editor.setVirtualBufferContent(state.bufferId, entries, { scrollRegions });
+      const borderRegions = buildThemeBorderRegions();
+      editor.setVirtualBufferContent(state.bufferId, entries, { scrollRegions, borderRegions });
       applySelectionHighlighting(entries);
     }
     moveCursorToField(path);
@@ -1819,7 +1834,8 @@ async function saveTheme(name?: string, restorePath?: string | null): Promise<bo
     const entries = buildDisplayEntries();
     if (state.bufferId !== null) {
       const scrollRegions = buildThemeScrollRegions();
-      editor.setVirtualBufferContent(state.bufferId, entries, { scrollRegions });
+      const borderRegions = buildThemeBorderRegions();
+      editor.setVirtualBufferContent(state.bufferId, entries, { scrollRegions, borderRegions });
       applySelectionHighlighting(entries);
     }
 
@@ -2071,6 +2087,18 @@ function onThemeEditorRegionScroll(data: { buffer_id: number; region_id: string;
 }
 registerHandler("onThemeEditorRegionScroll", onThemeEditorRegionScroll);
 editor.on("on_region_scroll", "onThemeEditorRegionScroll");
+
+function onThemeEditorBorderDrag(data: { buffer_id: number; border_id: string; delta: number }): void {
+  if (state.bufferId === null || data.buffer_id !== state.bufferId) return;
+  if (data.border_id !== "theme-divider") return;
+  const newWidth = Math.max(MIN_LEFT_WIDTH, Math.min(MAX_LEFT_WIDTH, LEFT_WIDTH + data.delta));
+  if (newWidth !== LEFT_WIDTH) {
+    LEFT_WIDTH = newWidth;
+    updateDisplay();
+  }
+}
+registerHandler("onThemeEditorBorderDrag", onThemeEditorBorderDrag);
+editor.on("on_border_drag", "onThemeEditorBorderDrag");
 
 /**
  * Handle buffer_closed event to reset state when buffer is closed by any means

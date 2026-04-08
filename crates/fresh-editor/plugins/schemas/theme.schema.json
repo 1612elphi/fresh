@@ -128,6 +128,30 @@
             35
           ]
         },
+        "diff_add_highlight_bg": {
+          "description": "Diff added word-level highlight background (optional override)\nWhen not set, computed by brightening diff_add_bg",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ColorDef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "diff_remove_highlight_bg": {
+          "description": "Diff removed word-level highlight background (optional override)\nWhen not set, computed by brightening diff_remove_bg",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ColorDef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "diff_modify_bg": {
           "description": "Diff modified line background",
           "$ref": "#/$defs/ColorDef",

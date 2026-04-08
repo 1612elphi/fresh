@@ -1501,7 +1501,7 @@ interface EditorAPI {
 	*/
 	createVirtualBufferInExistingSplit(opts: CreateVirtualBufferInExistingSplitOptions): Promise<VirtualBufferResult>;
 	/**
-	* Set virtual buffer content (takes array of entry objects)
+	* Set virtual buffer content (takes array of entry objects, optional options with scrollRegions)
 	* 
 	* Note: entries should be TextPropertyEntry[] - uses manual parsing for HashMap support
 	*/

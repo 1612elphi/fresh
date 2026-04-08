@@ -1935,10 +1935,12 @@ function formatNumber(n: number | undefined): string {
   return n.toString();
 }
 
-// Layout constants
-const LIST_WIDTH = 36;  // Width of left panel (package list)
+// Layout constants (LIST_WIDTH is now dynamic for border drag resize)
 const TOTAL_WIDTH = 88; // Total width of UI
-const DETAIL_WIDTH = TOTAL_WIDTH - LIST_WIDTH - 3; // Right panel width (minus divider)
+let LIST_WIDTH = 36;  // Width of left panel (package list), adjustable by drag
+const MIN_LIST_WIDTH = 20;
+const MAX_LIST_WIDTH = 60;
+function DETAIL_WIDTH(): number { return TOTAL_WIDTH - LIST_WIDTH - 3; }
 
 /**
  * Helper to check if a button is focused
@@ -2139,20 +2141,20 @@ function buildListViewEntries(): TextPropertyEntry[] {
   if (selectedItem) {
     // Package name
     rightLines.push({ text: selectedItem.name, type: "detail-title" });
-    rightLines.push({ text: "─".repeat(Math.min(selectedItem.name.length + 2, DETAIL_WIDTH - 2)), type: "detail-sep" });
+    rightLines.push({ text: "─".repeat(Math.min(selectedItem.name.length + 2, DETAIL_WIDTH() - 2)), type: "detail-sep" });
 
     // Version / Author / License on one line
     let metaLine = `v${selectedItem.version}`;
     if (selectedItem.author) metaLine += ` • ${selectedItem.author}`;
     if (selectedItem.license) metaLine += ` • ${selectedItem.license}`;
-    if (metaLine.length > DETAIL_WIDTH - 2) metaLine = metaLine.slice(0, DETAIL_WIDTH - 5) + "...";
+    if (metaLine.length > DETAIL_WIDTH() - 2) metaLine = metaLine.slice(0, DETAIL_WIDTH() - 5) + "...";
     rightLines.push({ text: metaLine, type: "detail-meta" });
 
     rightLines.push({ text: "", type: "blank" });
 
     // Description (wrapped)
     const descText = selectedItem.description || "No description available";
-    const descLines = wrapText(descText, DETAIL_WIDTH - 2);
+    const descLines = wrapText(descText, DETAIL_WIDTH() - 2);
     for (const line of descLines) {
       rightLines.push({ text: line, type: "detail-desc" });
     }
@@ -2172,8 +2174,8 @@ function buildListViewEntries(): TextPropertyEntry[] {
       let displayUrl = selectedItem.repository
         .replace(/^https?:\/\//, "")
         .replace(/\.git$/, "");
-      if (displayUrl.length > DETAIL_WIDTH - 2) {
-        displayUrl = displayUrl.slice(0, DETAIL_WIDTH - 5) + "...";
+      if (displayUrl.length > DETAIL_WIDTH() - 2) {
+        displayUrl = displayUrl.slice(0, DETAIL_WIDTH() - 5) + "...";
       }
       rightLines.push({ text: displayUrl, type: "detail-url" });
       rightLines.push({ text: "", type: "blank" });
@@ -2468,6 +2470,19 @@ function buildPkgScrollRegions(): Array<{ id: string; x: number; y: number; w: n
   return regions;
 }
 
+function buildPkgBorderRegions(): Array<{ id: string; x: number; y: number; length: number; direction: string }> {
+  const headerRows = 4;
+  const footerRows = 2;
+  const panelRows = Math.max(pkgState.viewportHeight - headerRows - footerRows, 4);
+  return [{
+    id: "pkg-divider",
+    x: LIST_WIDTH,
+    y: headerRows,
+    length: panelRows,
+    direction: "v",
+  }];
+}
+
 function updatePkgManagerView(): void {
   if (pkgState.bufferId === null) return;
 
@@ -2479,7 +2494,8 @@ function updatePkgManagerView(): void {
 
   const entries = buildListViewEntries();
   const scrollRegions = buildPkgScrollRegions();
-  editor.setVirtualBufferContent(pkgState.bufferId, entries, { scrollRegions });
+  const borderRegions = buildPkgBorderRegions();
+  editor.setVirtualBufferContent(pkgState.bufferId, entries, { scrollRegions, borderRegions });
   applyPkgManagerHighlighting();
 }
 
@@ -2818,6 +2834,18 @@ function on_pkg_region_scroll(data: { buffer_id: number; region_id: string; offs
 }
 registerHandler("on_pkg_region_scroll", on_pkg_region_scroll);
 editor.on("on_region_scroll", "on_pkg_region_scroll");
+
+function on_pkg_border_drag(data: { buffer_id: number; border_id: string; delta: number }): void {
+  if (!pkgState.isOpen || pkgState.bufferId === null) return;
+  if (data.buffer_id !== pkgState.bufferId || data.border_id !== "pkg-divider") return;
+  const newWidth = Math.max(MIN_LIST_WIDTH, Math.min(MAX_LIST_WIDTH, LIST_WIDTH + data.delta));
+  if (newWidth !== LIST_WIDTH) {
+    LIST_WIDTH = newWidth;
+    updatePkgManagerView();
+  }
+}
+registerHandler("on_pkg_border_drag", on_pkg_border_drag);
+editor.on("on_border_drag", "on_pkg_border_drag");
 
 function on_pkg_resize(): void {
   if (!pkgState.isOpen) return;
