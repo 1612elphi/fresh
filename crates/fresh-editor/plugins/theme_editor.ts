@@ -818,8 +818,8 @@ function buildTreeLines(): TreeLine[] {
     type: "header",
   });
 
-  // Separator
-  lines.push({ text: "─".repeat(36), type: "separator" });
+  // Separator (adapt to panel width)
+  lines.push({ text: "─".repeat(Math.max(10, LEFT_WIDTH - 2)), type: "separator" });
 
   // Filter
   if (state.filterText) {
@@ -827,7 +827,7 @@ function buildTreeLines(): TreeLine[] {
       text: `Filter: [${state.filterText}]`,
       type: "filter",
     });
-    lines.push({ text: "─".repeat(36), type: "separator" });
+    lines.push({ text: "─".repeat(Math.max(10, LEFT_WIDTH - 2)), type: "separator" });
   }
 
   // Build visible fields
@@ -854,11 +854,15 @@ function buildTreeLines(): TreeLine[] {
       });
     } else {
       const sel = isSelected && state.focusPanel === "tree" ? "▸" : " ";
-      const name = field.def.key.length > 13 ? field.def.key.slice(0, 12) + "…" : field.def.key;
+      // Adapt name/value truncation to panel width
+      // Layout: "  ▸ name.padEnd(nameW) ██ value" = 6 + nameW + 3 + valueW
+      const nameW = Math.max(8, LEFT_WIDTH - 18);
+      const valueW = Math.max(5, LEFT_WIDTH - nameW - 9);
+      const name = field.def.key.length > nameW ? field.def.key.slice(0, nameW - 1) + "…" : field.def.key;
       const colorStr = formatColorValue(field.value);
-      const valueStr = colorStr.length > 9 ? colorStr.slice(0, 8) + "…" : colorStr;
+      const valueStr = colorStr.length > valueW ? colorStr.slice(0, valueW - 1) + "…" : colorStr;
       lines.push({
-        text: `  ${sel} ${name.padEnd(13)} ██ ${valueStr}`,
+        text: `  ${sel} ${name.padEnd(nameW)} ██ ${valueStr}`,
         type: "tree-field",
         index: i,
         path: field.path,

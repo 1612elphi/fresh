@@ -2098,8 +2098,9 @@ function buildListViewEntries(): TextPropertyEntry[] {
       const prefix = isSelected && listFocused ? "▸" : " ";
       const status = item.updateAvailable ? "↑" : "✓";
       const ver = item.version.length > 7 ? item.version.slice(0, 6) + "…" : item.version;
-      const name = item.name.length > 18 ? item.name.slice(0, 17) + "…" : item.name;
-      const line = `${prefix} ${name.padEnd(18)} ${ver.padEnd(7)} ${status}`;
+      const nameW = Math.max(8, LIST_WIDTH - 16);
+      const name = item.name.length > nameW ? item.name.slice(0, nameW - 1) + "…" : item.name;
+      const line = `${prefix} ${name.padEnd(nameW)} ${ver.padEnd(7)} ${status}`;
       leftLines.push({ text: line, type: "package-row", selected: isSelected, installed: true });
       idx++;
     }
@@ -2116,8 +2117,9 @@ function buildListViewEntries(): TextPropertyEntry[] {
       const listFocused = pkgState.focus.type === "list";
       const prefix = isSelected && listFocused ? "▸" : " ";
       const typeTag = item.packageType === "theme" ? "T" : item.packageType === "language" ? "L" : item.packageType === "bundle" ? "B" : "P";
-      const name = item.name.length > 22 ? item.name.slice(0, 21) + "…" : item.name;
-      const line = `${prefix} ${name.padEnd(22)} [${typeTag}]`;
+      const availNameW = Math.max(8, LIST_WIDTH - 10);
+      const name = item.name.length > availNameW ? item.name.slice(0, availNameW - 1) + "…" : item.name;
+      const line = `${prefix} ${name.padEnd(availNameW)} [${typeTag}]`;
       leftLines.push({ text: line, type: "package-row", selected: isSelected, installed: false });
       idx++;
     }
