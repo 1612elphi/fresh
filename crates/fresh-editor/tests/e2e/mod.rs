@@ -101,6 +101,7 @@ pub mod rendering;
 pub mod save_as_language_detection;
 pub mod save_nonexistent_directory;
 pub mod scroll_clearing;
+pub mod scroll_region;
 pub mod scrolling;
 pub mod search;
 pub mod search_navigation_after_move;
