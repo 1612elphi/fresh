@@ -1470,25 +1470,12 @@ impl Editor {
             .split_at_position(col, row)
             .unwrap_or_else(|| (self.split_manager.active_split(), self.active_buffer()));
 
-        // Check if mouse is over a scroll region in a virtual buffer.
-        // If so, the plugin's mouse_scroll handler manages it — skip default scroll.
+        // If the buffer has scroll regions or border regions, it's a panel UI.
+        // The plugin's mouse_scroll handler manages all scrolling — skip default scroll
+        // for the entire buffer, not just within individual scroll regions.
         if let Some(state) = self.buffers.get(&buffer_id) {
-            if !state.scroll_regions.is_empty() {
-                // Find the content rect for this split to translate screen→buffer coords
-                if let Some(content_rect) = self.cached_layout.split_content_rect(target_split) {
-                    let local_col = col.saturating_sub(content_rect.x);
-                    let local_row = row.saturating_sub(content_rect.y);
-                    for region in &state.scroll_regions {
-                        if local_col >= region.x
-                            && local_col < region.x + region.width
-                            && local_row >= region.y
-                            && local_row < region.y + region.height
-                        {
-                            // Mouse is within a scroll region — plugin handles this
-                            return Ok(());
-                        }
-                    }
-                }
+            if !state.scroll_regions.is_empty() || !state.border_regions.is_empty() {
+                return Ok(());
             }
         }
 

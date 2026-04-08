@@ -1355,13 +1355,14 @@ let isUpdatingDisplay = false;
  * Use for structural changes (open, section toggle, color edit, filter).
  */
 function buildThemeScrollRegions(): Array<{ id: string; x: number; y: number; w: number; h: number; totalLines: number; offset: number }> {
-  const regions: Array<{ id: string; x: number; y: number; w: number; h: number; totalLines: number; offset: number }> = [];
   const treeVisibleRows = Math.max(8, state.viewportHeight - 2);
   const allLeftLines = buildTreeLines();
+  const rw = RIGHT_WIDTH();
 
-  // Left panel (theme tree) scroll region
-  if (allLeftLines.length > treeVisibleRows) {
-    regions.push({
+  // Always declare both scroll regions so the core suppresses default buffer scrolling.
+  // The core only renders a scrollbar when totalLines > height.
+  return [
+    {
       id: "theme-tree",
       x: 0,
       y: 0,
@@ -1369,10 +1370,17 @@ function buildThemeScrollRegions(): Array<{ id: string; x: number; y: number; w:
       h: treeVisibleRows,
       totalLines: allLeftLines.length,
       offset: state.treeScrollOffset,
-    });
-  }
-
-  return regions;
+    },
+    {
+      id: "theme-picker",
+      x: LEFT_WIDTH + 1,
+      y: 0,
+      w: rw,
+      h: treeVisibleRows,
+      totalLines: treeVisibleRows, // content always fits — no scrollbar, just suppress default scroll
+      offset: 0,
+    },
+  ];
 }
 
 function buildThemeBorderRegions(): Array<{ id: string; x: number; y: number; length: number; direction: string }> {
@@ -2088,10 +2096,12 @@ function onThemeEditorRegionScroll(data: { buffer_id: number; region_id: string;
 registerHandler("onThemeEditorRegionScroll", onThemeEditorRegionScroll);
 editor.on("on_region_scroll", "onThemeEditorRegionScroll");
 
+let themeDragStartWidth: number | null = null;
 function onThemeEditorBorderDrag(data: { buffer_id: number; border_id: string; delta: number }): void {
   if (state.bufferId === null || data.buffer_id !== state.bufferId) return;
   if (data.border_id !== "theme-divider") return;
-  const newWidth = Math.max(MIN_LEFT_WIDTH, Math.min(MAX_LEFT_WIDTH, LEFT_WIDTH + data.delta));
+  if (themeDragStartWidth === null) themeDragStartWidth = LEFT_WIDTH;
+  const newWidth = Math.max(MIN_LEFT_WIDTH, Math.min(MAX_LEFT_WIDTH, themeDragStartWidth + data.delta));
   if (newWidth !== LEFT_WIDTH) {
     LEFT_WIDTH = newWidth;
     updateDisplay();
@@ -2099,6 +2109,10 @@ function onThemeEditorBorderDrag(data: { buffer_id: number; border_id: string; d
 }
 registerHandler("onThemeEditorBorderDrag", onThemeEditorBorderDrag);
 editor.on("on_border_drag", "onThemeEditorBorderDrag");
+
+function onThemeEditorBorderDragEnd(): void { themeDragStartWidth = null; }
+registerHandler("onThemeEditorBorderDragEnd", onThemeEditorBorderDragEnd);
+editor.on("on_border_drag_end", "onThemeEditorBorderDragEnd");
 
 /**
  * Handle buffer_closed event to reset state when buffer is closed by any means

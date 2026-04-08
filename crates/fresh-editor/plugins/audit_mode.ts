@@ -1006,18 +1006,23 @@ function on_review_region_scroll(data: { buffer_id: number; region_id: string; o
 registerHandler("on_review_region_scroll", on_review_region_scroll);
 editor.on("on_region_scroll", "on_review_region_scroll");
 
+let reviewDragStartWidth: number | null = null;
 function on_review_border_drag(data: { buffer_id: number; border_id: string; delta: number }): void {
     if (state.reviewBufferId === null || data.buffer_id !== state.reviewBufferId) return;
     if (data.border_id !== "review-divider") return;
-    const currentLeft = getReviewLeftWidth();
-    const newLeft = Math.max(20, Math.min(state.viewportWidth - 20, currentLeft + data.delta));
-    if (newLeft !== currentLeft) {
+    if (reviewDragStartWidth === null) reviewDragStartWidth = getReviewLeftWidth();
+    const newLeft = Math.max(20, Math.min(state.viewportWidth - 20, reviewDragStartWidth + data.delta));
+    if (newLeft !== getReviewLeftWidth()) {
         state.leftWidthOverride = newLeft;
         updateMagitDisplay();
     }
 }
 registerHandler("on_review_border_drag", on_review_border_drag);
 editor.on("on_border_drag", "on_review_border_drag");
+
+function on_review_border_drag_end(): void { reviewDragStartWidth = null; }
+registerHandler("on_review_border_drag_end", on_review_border_drag_end);
+editor.on("on_border_drag_end", "on_review_border_drag_end");
 
 /**
  * Represents an aligned line pair for side-by-side diff display

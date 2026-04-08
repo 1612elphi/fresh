@@ -2449,25 +2449,32 @@ function applyPkgManagerHighlighting(): void {
  * Update the package manager view
  */
 function buildPkgScrollRegions(): Array<{ id: string; x: number; y: number; w: number; h: number; totalLines: number; offset: number }> {
-  const regions: Array<{ id: string; x: number; y: number; w: number; h: number; totalLines: number; offset: number }> = [];
   const headerRows = 4;
   const footerRows = 2;
   const panelRows = Math.max(pkgState.viewportHeight - headerRows - footerRows, 4);
+  const dw = DETAIL_WIDTH();
 
-  // Left panel scroll region (only if scrollbar needed)
-  if (pkgState.listScroll.needsScrollbar()) {
-    regions.push({
+  // Always declare both scroll regions so the core suppresses default buffer scrolling.
+  return [
+    {
       id: "pkg-list",
       x: 0,
       y: headerRows,
       w: LIST_WIDTH,
       h: panelRows,
-      totalLines: pkgState.listScroll.contentHeight,
+      totalLines: pkgState.listScroll.contentHeight || panelRows,
       offset: pkgState.listScroll.offset,
-    });
-  }
-
-  return regions;
+    },
+    {
+      id: "pkg-detail",
+      x: LIST_WIDTH + 1,
+      y: headerRows,
+      w: dw,
+      h: panelRows,
+      totalLines: panelRows, // details always fit — just suppress default scroll
+      offset: 0,
+    },
+  ];
 }
 
 function buildPkgBorderRegions(): Array<{ id: string; x: number; y: number; length: number; direction: string }> {
@@ -2835,10 +2842,12 @@ function on_pkg_region_scroll(data: { buffer_id: number; region_id: string; offs
 registerHandler("on_pkg_region_scroll", on_pkg_region_scroll);
 editor.on("on_region_scroll", "on_pkg_region_scroll");
 
+let pkgDragStartWidth: number | null = null;
 function on_pkg_border_drag(data: { buffer_id: number; border_id: string; delta: number }): void {
   if (!pkgState.isOpen || pkgState.bufferId === null) return;
   if (data.buffer_id !== pkgState.bufferId || data.border_id !== "pkg-divider") return;
-  const newWidth = Math.max(MIN_LIST_WIDTH, Math.min(MAX_LIST_WIDTH, LIST_WIDTH + data.delta));
+  if (pkgDragStartWidth === null) pkgDragStartWidth = LIST_WIDTH;
+  const newWidth = Math.max(MIN_LIST_WIDTH, Math.min(MAX_LIST_WIDTH, pkgDragStartWidth + data.delta));
   if (newWidth !== LIST_WIDTH) {
     LIST_WIDTH = newWidth;
     updatePkgManagerView();
@@ -2846,6 +2855,12 @@ function on_pkg_border_drag(data: { buffer_id: number; border_id: string; delta:
 }
 registerHandler("on_pkg_border_drag", on_pkg_border_drag);
 editor.on("on_border_drag", "on_pkg_border_drag");
+
+function on_pkg_border_drag_end(): void {
+  pkgDragStartWidth = null;
+}
+registerHandler("on_pkg_border_drag_end", on_pkg_border_drag_end);
+editor.on("on_border_drag_end", "on_pkg_border_drag_end");
 
 function on_pkg_resize(): void {
   if (!pkgState.isOpen) return;
