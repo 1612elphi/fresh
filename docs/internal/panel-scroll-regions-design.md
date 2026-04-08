@@ -397,8 +397,12 @@ this is an escape hatch, not the recommended path.
 
 ## Implementation Plan
 
-All four layers are built together and landed as a single coherent
-change. No intermediate states, no text-based placeholders.
+All four layers land together as a single coherent change. No
+intermediate states, no text-based placeholders.
+
+Commits should be structured per CONTRIBUTING.md: separate bug fixes
+from new functionality, each commit must pass `cargo check --all-targets`
+and `cargo fmt`.
 
 ### 1. Core Scroll Regions (Rust, ~150 LoC)
 
@@ -410,6 +414,9 @@ change. No intermediate states, no text-based placeholders.
   region rects. If hit, dispatch `on_region_scroll(id, delta)` or
   `on_region_scroll(id, ratio)` to the plugin instead of default
   buffer scroll.
+- Regenerate TS definitions after modifying the plugin API:
+  `cargo test -p fresh-plugin-runtime write_fresh_dts_file -- --ignored`
+- Regenerate JSON schemas: `./scripts/gen_schema.sh`
 
 ### 2. Layout Engine (TypeScript, ~300 LoC)
 
@@ -449,6 +456,29 @@ change. No intermediate states, no text-based placeholders.
   `diffScrollOffset` tracking.
 - **theme_editor.ts**: left panel scrollable, right panel grid
   navigation. Replaces manual `treeScrollOffset` tracking.
+
+### 6. Type-check and Test
+
+- Run `crates/fresh-editor/plugins/check-types.sh` to verify all
+  plugin TypeScript after migration.
+- **E2E tests** for the new panel scroll flow. E2E tests send
+  keyboard/mouse events and examine final rendered output (not
+  internal state). At minimum:
+  - Open a panel-based plugin (e.g. pkg manager), verify both panels
+    render with scrollbars when content exceeds viewport.
+  - Keyboard scroll (arrow keys, PageUp/PageDown) in focused panel
+    updates that panel's scrollbar position without affecting the
+    other panel.
+  - Tab switches focus between panels; subsequent scroll affects the
+    newly focused panel.
+  - Mouse wheel over a panel scrolls that panel only.
+  - Resize terminal: panels re-layout and scroll positions clamp
+    correctly.
+- Use semantic waiting (wait for specific state/render changes), not
+  fixed timers. No timeouts inside tests — `cargo nextest` handles
+  external timeouts.
+- Test isolation: tests run in parallel with internal clipboard mode
+  and per-test temp directories.
 
 ## Relationship to Existing Infrastructure
 
