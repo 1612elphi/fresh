@@ -1342,16 +1342,16 @@ impl SplitRenderer {
                     (0, 0)
                 };
 
-                // Render per-region scrollbars for virtual buffer scroll regions
+                // Render per-region scrollbars for virtual buffer scroll regions.
+                // Always render for declared regions (even when content fits)
+                // to provide visual feedback that the panel is an independent
+                // scroll region.
                 if !state.scroll_regions.is_empty() {
                     use super::scrollbar::{
                         render_scrollbar as render_sb, ScrollbarColors, ScrollbarState,
                     };
                     let sb_colors = ScrollbarColors::from_theme(theme);
                     for region in &state.scroll_regions {
-                        if region.total_lines <= region.height as usize {
-                            continue; // No scrollbar needed
-                        }
                         // Translate region-local coords to absolute screen coords.
                         // Scrollbar is the rightmost column of the region.
                         let sb_x =

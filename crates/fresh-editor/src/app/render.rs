@@ -568,9 +568,6 @@ impl Editor {
             for (split_id, buffer_id, content_rect, _, _, _) in &self.cached_layout.split_areas {
                 if let Some(state) = self.buffers.get(buffer_id) {
                     for region in &state.scroll_regions {
-                        if region.total_lines <= region.height as usize {
-                            continue;
-                        }
                         let sb_x = content_rect.x + region.x + region.width.saturating_sub(1);
                         let sb_y = content_rect.y + region.y;
                         let sb_h = region
