@@ -632,12 +632,53 @@ function buildMagitDisplayEntries(): TextPropertyEntry[] {
  * Refresh the display — rebuild entries and set buffer content.
  * Always re-queries viewport dimensions to handle sidebar toggles and splits.
  */
+function buildReviewScrollRegions(): Array<{ id: string; x: number; y: number; w: number; h: number; totalLines: number; offset: number }> {
+    const H = state.viewportHeight;
+    const W = state.viewportWidth;
+    const leftWidth = Math.max(28, Math.floor(W * 0.3));
+    const rightWidth = W - leftWidth - 1;
+    const mainRows = H - 2; // rows 2..H-1 (toolbar + header take 2)
+
+    const regions: Array<{ id: string; x: number; y: number; w: number; h: number; totalLines: number; offset: number }> = [];
+
+    // Left panel (file list) - scroll region if content exceeds viewport
+    const allFileLines = buildFileListLines();
+    if (allFileLines.length > mainRows) {
+        regions.push({
+            id: "review-files",
+            x: 0,
+            y: 2,
+            w: leftWidth,
+            h: mainRows,
+            totalLines: allFileLines.length,
+            offset: state.fileScrollOffset,
+        });
+    }
+
+    // Right panel (diff) - scroll region if content exceeds viewport
+    const diffLines = buildDiffLines(rightWidth);
+    if (diffLines.length > mainRows) {
+        regions.push({
+            id: "review-diff",
+            x: leftWidth + 1,
+            y: 2,
+            w: rightWidth,
+            h: mainRows,
+            totalLines: diffLines.length,
+            offset: state.diffScrollOffset,
+        });
+    }
+
+    return regions;
+}
+
 function updateMagitDisplay(): void {
     if (state.reviewBufferId === null) return;
     refreshViewportDimensions();
     const entries = buildMagitDisplayEntries();
+    const scrollRegions = buildReviewScrollRegions();
     editor.clearNamespace(state.reviewBufferId, "review-diff");
-    editor.setVirtualBufferContent(state.reviewBufferId, entries);
+    editor.setVirtualBufferContent(state.reviewBufferId, entries, { scrollRegions });
 }
 
 function review_refresh() { refreshMagitData(); }
@@ -900,6 +941,38 @@ function on_viewport_changed(data: any) {
     }
 }
 registerHandler("on_viewport_changed", on_viewport_changed);
+
+function on_review_mouse_scroll(data: { buffer_id: number; delta: number; col: number; row: number }): void {
+    if (state.reviewBufferId === null) return;
+    if (data.buffer_id !== state.reviewBufferId) return;
+
+    const W = state.viewportWidth;
+    const leftWidth = Math.max(28, Math.floor(W * 0.3));
+    const mainRows = state.viewportHeight - 2;
+
+    if (data.col < leftWidth) {
+        // Scroll the file list panel
+        if (state.focusPanel === 'files') {
+            // Move selection with scroll
+            const newIndex = state.selectedIndex + (data.delta > 0 ? 1 : -1);
+            if (newIndex >= 0 && newIndex < state.files.length) {
+                state.selectedIndex = newIndex;
+                state.diffScrollOffset = 0;
+            }
+        } else {
+            state.fileScrollOffset = Math.max(0, state.fileScrollOffset + data.delta);
+        }
+    } else {
+        // Scroll the diff panel
+        const allFileLines = buildFileListLines();
+        const diffLines = buildDiffLines(W - leftWidth - 1);
+        const maxDiffOffset = Math.max(0, diffLines.length - mainRows);
+        state.diffScrollOffset = Math.max(0, Math.min(maxDiffOffset, state.diffScrollOffset + data.delta));
+    }
+    updateMagitDisplay();
+}
+registerHandler("on_review_mouse_scroll", on_review_mouse_scroll);
+editor.on("mouse_scroll", "on_review_mouse_scroll");
 
 /**
  * Represents an aligned line pair for side-by-side diff display

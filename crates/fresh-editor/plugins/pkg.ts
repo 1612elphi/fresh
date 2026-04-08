@@ -29,6 +29,7 @@
  */
 
 import { Finder } from "./lib/finder.ts";
+import { ScrollState } from "./lib/scroll-manager.ts";
 
 const editor = getEditor();
 
@@ -1654,6 +1655,8 @@ interface PkgManagerState {
   selectedIndex: number;
   focus: FocusTarget;  // What element has Tab focus
   isLoading: boolean;
+  listScroll: ScrollState;
+  viewportHeight: number;
 }
 
 const pkgState: PkgManagerState = {
@@ -1667,6 +1670,8 @@ const pkgState: PkgManagerState = {
   selectedIndex: 0,
   focus: { type: "list" },
   isLoading: false,
+  listScroll: new ScrollState(),
+  viewportHeight: 24,
 };
 
 // Theme-aware color configuration
@@ -2188,10 +2193,37 @@ function buildListViewEntries(): TextPropertyEntry[] {
     rightLines.push({ text: "to view details", type: "empty-state" });
   }
 
-  // Merge left and right panels into rows
-  const maxRows = Math.max(leftLines.length, rightLines.length, 8);
+  // --- Left panel scroll management ---
+  // Header takes 4 rows (title, search, filters, separator), footer takes 2 (separator, help)
+  const headerRows = 4;
+  const footerRows = 2;
+  const panelRows = Math.max(pkgState.viewportHeight - headerRows - footerRows, 4);
+
+  // Find which line in leftLines corresponds to selectedIndex
+  let selectedLineInLeft = -1;
+  {
+    let lineIdx = 0;
+    for (const ll of leftLines) {
+      if (ll.type === "package-row" && ll.selected) {
+        selectedLineInLeft = lineIdx;
+        break;
+      }
+      lineIdx++;
+    }
+  }
+
+  // Update scroll state and auto-scroll selected item into view
+  pkgState.listScroll.setViewport(panelRows);
+  pkgState.listScroll.setContentHeight(leftLines.length);
+  if (selectedLineInLeft >= 0) {
+    pkgState.listScroll.ensureVisible(selectedLineInLeft, 1);
+  }
+  const leftScrollOffset = pkgState.listScroll.offset;
+
+  // Merge left and right panels into rows (viewport-clamped)
+  const maxRows = panelRows;
   for (let i = 0; i < maxRows; i++) {
-    const leftItem = leftLines[i];
+    const leftItem = leftLines[leftScrollOffset + i];
     const rightItem = rightLines[i];
 
     // Left side (padded to fixed width)
@@ -2414,11 +2446,40 @@ function applyPkgManagerHighlighting(): void {
 /**
  * Update the package manager view
  */
+function buildPkgScrollRegions(): Array<{ id: string; x: number; y: number; w: number; h: number; totalLines: number; offset: number }> {
+  const regions: Array<{ id: string; x: number; y: number; w: number; h: number; totalLines: number; offset: number }> = [];
+  const headerRows = 4;
+  const footerRows = 2;
+  const panelRows = Math.max(pkgState.viewportHeight - headerRows - footerRows, 4);
+
+  // Left panel scroll region (only if scrollbar needed)
+  if (pkgState.listScroll.needsScrollbar()) {
+    regions.push({
+      id: "pkg-list",
+      x: 0,
+      y: headerRows,
+      w: LIST_WIDTH,
+      h: panelRows,
+      totalLines: pkgState.listScroll.contentHeight,
+      offset: pkgState.listScroll.offset,
+    });
+  }
+
+  return regions;
+}
+
 function updatePkgManagerView(): void {
   if (pkgState.bufferId === null) return;
 
+  // Update viewport height
+  const viewport = editor.getViewport();
+  if (viewport) {
+    pkgState.viewportHeight = viewport.height;
+  }
+
   const entries = buildListViewEntries();
-  editor.setVirtualBufferContent(pkgState.bufferId, entries);
+  const scrollRegions = buildPkgScrollRegions();
+  editor.setVirtualBufferContent(pkgState.bufferId, entries, { scrollRegions });
   applyPkgManagerHighlighting();
 }
 
@@ -2443,6 +2504,7 @@ async function openPackageManager(): Promise<void> {
   pkgState.searchQuery = "";
   pkgState.selectedIndex = 0;
   pkgState.focus = { type: "list" };
+  pkgState.listScroll = new ScrollState();
 
   // Build package list immediately with installed packages and cached registry
   // This allows viewing/managing installed packages without waiting for network
@@ -2605,6 +2667,7 @@ async function pkg_activate() : Promise<void> {
     const filters = ["all", "installed", "plugins", "themes", "languages", "bundles"] as const;
     pkgState.filter = filters[focus.index];
     pkgState.selectedIndex = 0;
+    pkgState.listScroll = new ScrollState();
     pkgState.items = buildPackageList();
     updatePkgManagerView();
     return;
@@ -2722,6 +2785,7 @@ function onPkgSearchConfirmed(args: {
 
   pkgState.searchQuery = args.input.trim();
   pkgState.selectedIndex = 0;
+  pkgState.listScroll = new ScrollState();
   pkgState.focus = { type: "list" };
   updatePkgManagerView();
 
@@ -2730,6 +2794,30 @@ function onPkgSearchConfirmed(args: {
 registerHandler("onPkgSearchConfirmed", onPkgSearchConfirmed);
 
 editor.on("prompt_confirmed", "onPkgSearchConfirmed");
+
+function on_pkg_mouse_scroll(data: { buffer_id: number; delta: number; col: number; row: number }): void {
+  if (!pkgState.isOpen || pkgState.bufferId === null) return;
+  if (data.buffer_id !== pkgState.bufferId) return;
+
+  // Mouse scroll on the left panel area scrolls the package list
+  if (data.col < LIST_WIDTH) {
+    pkgState.listScroll.scrollBy(data.delta);
+    updatePkgManagerView();
+  }
+}
+registerHandler("on_pkg_mouse_scroll", on_pkg_mouse_scroll);
+editor.on("mouse_scroll", "on_pkg_mouse_scroll");
+
+function on_pkg_resize(): void {
+  if (!pkgState.isOpen) return;
+  const viewport = editor.getViewport();
+  if (viewport) {
+    pkgState.viewportHeight = viewport.height;
+  }
+  updatePkgManagerView();
+}
+registerHandler("on_pkg_resize", on_pkg_resize);
+editor.on("resize", "on_pkg_resize");
 
 // Legacy Finder-based UI (kept for backwards compatibility)
 const registryFinder = new Finder<[string, RegistryEntry]>(editor, {

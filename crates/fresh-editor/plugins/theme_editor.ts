@@ -1352,17 +1352,39 @@ let isUpdatingDisplay = false;
  * Full display update — rebuilds content and all overlays.
  * Use for structural changes (open, section toggle, color edit, filter).
  */
+function buildThemeScrollRegions(): Array<{ id: string; x: number; y: number; w: number; h: number; totalLines: number; offset: number }> {
+  const regions: Array<{ id: string; x: number; y: number; w: number; h: number; totalLines: number; offset: number }> = [];
+  const treeVisibleRows = Math.max(8, state.viewportHeight - 2);
+  const allLeftLines = buildTreeLines();
+
+  // Left panel (theme tree) scroll region
+  if (allLeftLines.length > treeVisibleRows) {
+    regions.push({
+      id: "theme-tree",
+      x: 0,
+      y: 0,
+      w: LEFT_WIDTH,
+      h: treeVisibleRows,
+      totalLines: allLeftLines.length,
+      offset: state.treeScrollOffset,
+    });
+  }
+
+  return regions;
+}
+
 function updateDisplay(): void {
   if (state.bufferId === null) return;
   isUpdatingDisplay = true;
 
   const entries = buildDisplayEntries();
+  const scrollRegions = buildThemeScrollRegions();
 
   // Clear selection overlays BEFORE replacing content to prevent stale
   // theme-sel markers from having wrong positions after the buffer replace
   editor.clearNamespace(state.bufferId, "theme-sel");
 
-  editor.setVirtualBufferContent(state.bufferId, entries);
+  editor.setVirtualBufferContent(state.bufferId, entries, { scrollRegions });
 
   // Selection highlights use a separate namespace via addOverlay (dynamic, position-dependent)
   applySelectionHighlighting(entries);
@@ -1534,7 +1556,8 @@ function onThemeColorPromptConfirmed(args: {
 
     const entries = buildDisplayEntries();
     if (state.bufferId !== null) {
-      editor.setVirtualBufferContent(state.bufferId, entries);
+      const scrollRegions = buildThemeScrollRegions();
+      editor.setVirtualBufferContent(state.bufferId, entries, { scrollRegions });
       applySelectionHighlighting(entries);
     }
     moveCursorToField(path);
@@ -1795,7 +1818,8 @@ async function saveTheme(name?: string, restorePath?: string | null): Promise<bo
     // Update display
     const entries = buildDisplayEntries();
     if (state.bufferId !== null) {
-      editor.setVirtualBufferContent(state.bufferId, entries);
+      const scrollRegions = buildThemeScrollRegions();
+      editor.setVirtualBufferContent(state.bufferId, entries, { scrollRegions });
       applySelectionHighlighting(entries);
     }
 
